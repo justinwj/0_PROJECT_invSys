@@ -44,7 +44,7 @@ Sub ReplaceAllCodeFromFiles()
     Dim filteredCode As String
     Dim i As Long
     Dim lineTrim As String
-    importPath = "C:\Temp\VBAExport\" ' <-- update as needed
+    importPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\" ' <-- update as needed
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(importPath) Then
         MsgBox "Folder not found: " & importPath, vbExclamation
@@ -67,24 +67,27 @@ Sub ReplaceAllCodeFromFiles()
                 codeLines = Split(codeText, vbCrLf)
                 filteredCode = ""
                 For i = LBound(codeLines) To UBound(codeLines)
-                    lineTrim = Trim(codeLines(i))
-                        If lineTrim = "" Then GoTo NextLine
-                        If UCase(Left(lineTrim, 5)) = "BEGIN" Then GoTo NextLine
-                        If UCase(lineTrim) = "END" Then GoTo NextLine
-                        If Left(UCase(lineTrim), 7) = "VERSION" Then GoTo NextLine
-                        If Left(UCase(lineTrim), 9) = "ATTRIBUTE" Then GoTo NextLine
-                        If Left(UCase(lineTrim), 8) = "MULTIUSE" Then GoTo NextLine
-                        If Left(lineTrim, 2) = "//" Then GoTo NextLine
-                        If Left(lineTrim, 1) = "{" And Right(lineTrim, 1) = "}" Then GoTo NextLine
-                        If Left(lineTrim, 7) = "Caption" Then GoTo NextLine
-                        If Left(lineTrim, 12) = "ClientHeight" Then GoTo NextLine
-                        If Left(lineTrim, 10) = "ClientLeft" Then GoTo NextLine
-                        If Left(lineTrim, 9) = "ClientTop" Then GoTo NextLine
-                        If Left(lineTrim, 11) = "ClientWidth" Then GoTo NextLine
-                        If Left(lineTrim, 13) = "OleObjectBlob" Then GoTo NextLine
-                        If Left(lineTrim, 15) = "StartUpPosition" Then GoTo NextLine
+                    lineTrim = codeLines(i)
+                    ' Filter out meta lines: Attribute lines that look like meta, not code lines
+                    If LCase(Left(Trim(lineTrim), 9)) = "attribute" Then
+                        ' Only skip if it matches the meta pattern: Attribute <name> = ... or Attribute <name>.<property> = ...
+                        If lineTrim Like "Attribute * =*" Or lineTrim Like "Attribute *.* =*" Then GoTo NextLine
                     End If
-                    filteredCode = filteredCode & codeLines(i) & vbCrLf
+                    If Trim(lineTrim) = "" Then GoTo NextLine
+                    If UCase(Left(Trim(lineTrim), 5)) = "BEGIN" Then GoTo NextLine
+                    If UCase(Trim(lineTrim)) = "END" Then GoTo NextLine
+                    If Left(UCase(Trim(lineTrim)), 7) = "VERSION" Then GoTo NextLine
+                    If Left(UCase(Trim(lineTrim)), 8) = "MULTIUSE" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 2) = "//" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 1) = "{" And Right(Trim(lineTrim), 1) = "}" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 7) = "Caption" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 12) = "ClientHeight" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 10) = "ClientLeft" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 9) = "ClientTop" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 11) = "ClientWidth" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 13) = "OleObjectBlob" Then GoTo NextLine
+                    If Left(Trim(lineTrim), 15) = "StartUpPosition" Then GoTo NextLine
+                    filteredCode = filteredCode & lineTrim & vbCrLf
 NextLine:
                 Next i
                 ' Replace code
