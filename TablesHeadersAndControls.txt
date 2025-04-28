@@ -1,0 +1,164 @@
+Sheet (Tab):  INVENTORY MANAGEMENT
+Sheet (Code): InventoryManagement
+  Table: invSys
+    Headers: ROW, ITEM_CODE, VENDOR(s), SUBSTITUTION, CATEGORY, PHASE, ASSIGNEE, DESCRIPTION, ITEM, UOM, LOCATION, RECEIVED, USED, MADE, SHIPMENTS, ADJUSTMENTS, TOTAL INV, LOSS, LAST EDITED, TOTAL INV LAST EDIT
+  Form Control: Button 1
+    Type: Button (0)
+    Text: ADD MADE
+  Form Control: Button 2
+    Type: Button (0)
+    Text: DEDUCT USED
+  Form Control: Button 4
+    Type: Button (0)
+    Text: ADD GOODS RECEIVED
+  Form Control: Button 5
+    Type: Button (0)
+    Text: DEDUCT SHIPMENTS
+  Form Control: Button 6
+    Type: Button (0)
+    Text: +-ADJUSTMENTS
+  Form Control: Button 8
+    Type: Button (0)
+    Text: UNDO macro
+
+  Form Control: Button 9
+    Type: Button (0)
+    Text: sign out
+
+
+
+  Form Control: Button 12
+    Type: Button (0)
+    Text: REDO macro
+
+  Form Control: Button 14
+    Type: Button (0)
+    Text: EDIT TOTAL INV
+  Form Control: Button 15
+    Type: Button (0)
+    Text: Lock TOTAL INV
+  Form Control: Button 19
+    Type: Button (0)
+    Text: Admin
+------------------------------------------------------------
+Sheet (Tab):  ReceivedTally
+Sheet (Code): ReceivedTally
+  Table: ReceivedTally
+    Headers: ref_NUMBER, ITEMS, QUANTITY, PRICE
+  Table: invSysData_Receiving
+    Headers: UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, TALLY_ROW
+  Table: ReceivingSavedList
+    Headers: SAVED LIST
+  Form Control: Button 1
+    Type: Button (0)
+    Text: Tally Received
+  Form Control: Button 2
+    Type: Button (0)
+    Text: Undo
+  Form Control: Button 3
+    Type: Button (0)
+    Text: Redo
+------------------------------------------------------------
+Sheet (Tab):  ShipmentsTally
+Sheet (Code): ShipmentsTally
+  Table: ShipmentsTally
+    Headers: ORDER_NUMBER, ITEMS, QUANTITY
+  Table: invSysData_Shipping
+    Headers: UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, TALLY_ROW
+  Table: ShippingSavedList
+    Headers: SAVED LIST
+  Form Control: Button 2
+    Type: Button (0)
+    Text: Undo
+  Form Control: Button 3
+    Type: Button (0)
+    Text: Redo
+  Form Control: Button 4
+    Type: Button (0)
+    Text: Tally Shipments
+  Form Control: Button 5
+    Type: Button (0)
+    Text: Button 5
+------------------------------------------------------------
+Sheet (Tab):  Production
+Sheet (Code): Production
+  Form Control: Button 1
+    Type: Button (0)
+    Text: Button 1
+------------------------------------------------------------
+Sheet (Tab):  CreateRecipe
+Sheet (Code): CreateRecipe
+------------------------------------------------------------
+Sheet (Tab):  Prediction
+Sheet (Code): Prediction
+------------------------------------------------------------
+Sheet (Tab):  Recipes
+Sheet (Code): Recipes
+  Table: Recipes
+    Headers: ROW, Rcode, Rcount, RECIPE, DEPARTMENT, DESCRIPTION, PROCESS, INPUT/OUTPUT, INGREDIENT, PERCENT, UOM, AMOUNT, CUMULATIVE, PRICE
+------------------------------------------------------------
+Sheet (Tab):  IngredientPalette
+Sheet (Code): IngredientsPalette
+------------------------------------------------------------
+Sheet (Tab):  SavedLists
+Sheet (Code): SavedLists
+------------------------------------------------------------
+Sheet (Tab):  Substitutions
+Sheet (Code): Substitutions
+  Table: Substitutions
+    Headers: Column1
+------------------------------------------------------------
+Sheet (Tab):  PredictionLog
+Sheet (Code): PredictionLog
+------------------------------------------------------------
+Sheet (Tab):  InventoryLog
+Sheet (Code): InventoryLog
+  Table: InventoryLog
+    Headers: LOG_ID, USER, ACTION, ITEM_CODE, ITEM_NAME, QUANTITY_CHANGE, NEW_QUANTITY, TIMESTAMP
+------------------------------------------------------------
+Sheet (Tab):  ProductionLog
+Sheet (Code): ProductionLog
+------------------------------------------------------------
+Sheet (Tab):  ReceivedLog
+Sheet (Code): ReceivedLog
+  Table: ReceivedLog
+    Headers: ref_NUMBER, ITEMS, QUANTITY, PRICE, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, Rcode
+------------------------------------------------------------
+Sheet (Tab):  ShipmentsLog
+Sheet (Code): ShipmentsLog
+  Table: ShipmentsLog
+    Headers: ORDER_NUMBER, ITEMS, QUANTITY, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, Rcode
+------------------------------------------------------------
+Sheet (Tab):  Codes
+Sheet (Code): Codes
+  Table: Department_Codes
+    Headers: DEPARTMENT CODES, TABLE NAME
+  Table: ingredient_Codes
+    Headers: INGREDIENTS, CODES
+------------------------------------------------------------
+Sheet (Tab):  Emails
+Sheet (Code): Emails
+  Table: Emails
+    Headers: NAME, EMAIL, ROLE
+------------------------------------------------------------
+Sheet (Tab):  UserCredentials
+Sheet (Code): UserCredentials
+  Table: UserCredentials
+    Headers: USER_ID, USERNAME, PIN, ROLE, STATUS, LAST LOGIN, PIN RESET
+  Table: tblRoles
+    Headers: Roles
+------------------------------------------------------------
+Sheet (Tab):  Notes
+Sheet (Code): Notes
+------------------------------------------------------------
+Sheet (Tab):  TestSummary
+Sheet (Code): TestSummary
+  Form Control: Button 1
+    Type: Button (0)
+    Text: Run Tests
+------------------------------------------------------------
+Sheet (Tab):  ErrorLog
+Sheet (Code): ErrorLog
+  Table: ErrorLog
+    Headers: DATE/TIME, PROCEDURE CONTEXT, ERROR NUMBER, ERROR DESCRIPTION
+------------------------------------------------------------
