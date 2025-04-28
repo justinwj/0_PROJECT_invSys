@@ -37,6 +37,7 @@ Sub ExportAllModules()
     MsgBox "Export complete!"
 End Sub
 ' Replace code in all modules, classes, forms, and sheets from files (no delete/replace)
+' this code works good, but trying to get it to work with multiple folders is not working
 Sub ReplaceAllCodeFromFiles()
     Dim fso As Object
     Dim folder As Object
@@ -144,41 +145,42 @@ Sub ExportTablesAndHeaders()
     MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
 End Sub
 
-    Sub ExportUserFormControls()
-        Dim vbProj As VBIDE.VBProject
-        Dim vbComp As VBIDE.VBComponent
-        Dim ctrl   As MSForms.Control
-        Dim outputPath As String, Fnum As Long
+Sub ExportUserFormControls()
+    Dim vbProj As VBIDE.VBProject
+    Dim vbComp As VBIDE.VBComponent
+    Dim ctrl   As MSForms.Control
+    Dim outputPath As String, Fnum As Long
         
-        '— adjust folder as needed (must exist) —
-        outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
-        Fnum = FreeFile
-        Open outputPath For Output As #Fnum
+    '— adjust folder as needed (must exist) —
+    outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
+    Fnum = FreeFile
+    Open outputPath For Output As #Fnum
         
-        Set vbProj = ThisWorkbook.VBProject
-        For Each vbComp In vbProj.VBComponents
-            ' only UserForm components
-            If vbComp.Type = vbext_ct_MSForm Then
-                Print #Fnum, "UserForm: " & vbComp.Name
-                ' iterate its controls
-                For Each ctrl In vbComp.Designer.Controls
-                    Print #Fnum, "  Control: " & ctrl.Name & " (" & TypeName(ctrl) & ")"
-                    On Error Resume Next
-                    ' many controls have a Caption
-                    Print #Fnum, "    Caption: " & ctrl.Caption
-                    ' and many have a Value
-                    Print #Fnum, "    Value: " & ctrl.value
-                    On Error GoTo 0
-                Next ctrl
-                Print #Fnum, String(50, "-")
-            End If
-        Next vbComp
+    Set vbProj = ThisWorkbook.VBProject
+    For Each vbComp In vbProj.VBComponents
+        ' only UserForm components
+        If vbComp.Type = vbext_ct_MSForm Then
+            Print #Fnum, "UserForm: " & vbComp.Name
+            ' iterate its controls
+            For Each ctrl In vbComp.Designer.Controls
+                Print #Fnum, "  Control: " & ctrl.Name & " (" & TypeName(ctrl) & ")"
+                On Error Resume Next
+                ' many controls have a Caption
+                Print #Fnum, "    Caption: " & ctrl.Caption
+                ' and many have a Value
+                Print #Fnum, "    Value: " & ctrl.value
+                On Error GoTo 0
+            Next ctrl
+            Print #Fnum, String(50, "-")
+        End If
+    Next vbComp
         
-        Close #Fnum
-        MsgBox "UserForm controls exported to:" & vbCrLf & outputPath, vbInformation
-    End Sub
+    Close #Fnum
+    MsgBox "UserForm controls exported to:" & vbCrLf & outputPath, vbInformation
+End Sub
     
 '============================================================
+' !!!!!!!!!!!!!!!!DOES NOT WORK!!!!!!!!!!!!!!!
 ' Sub: ImportNewComponentsOnly
 ' Purpose:
 '   - Imports any new .bas, .cls, or .frm files from the VSC export
