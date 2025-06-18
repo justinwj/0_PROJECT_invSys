@@ -1,11 +1,5 @@
-Attribute VB_Name = "modExportImportAll"
-' ===== modExportImportAll.bas =====
-'  ExportAllModules
-'  ReplaceAllCodeFromFiles
-'  ExportTablesHeadersAndControls
-'  ExportUserFormControls
-'  ImportNewComponentsOnly
 Option Explicit
+' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
 Sub ExportAllModules()
     Dim vbComp As VBIDE.VBComponent
     Dim exportPath As String
@@ -56,111 +50,232 @@ Sub ExportAllModules()
 
     MsgBox "Export complete!"
 End Sub
-' Refactored to work with subfolders: Sheets, Forms, Modules, Class Modules
+
 Public Sub ReplaceAllCodeFromFiles()
-    Const BASE_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"  ' ? adjust as needed
-    Dim fso            As Object
-    Dim wbProj         As VBIDE.VBProject
-    Dim subFolders     As Variant, sf As Variant
-    Dim folder         As Object, fileItem As Object
-    Dim vbComp         As VBIDE.VBComponent
-    Dim ts             As Object
-    Dim codeText       As String
-    Dim compName       As String
-    Dim ext            As String
-    
-    ' Early exit if base path missing
+    SyncModulesAndClasses
+    SyncFormsCodeBehind
+    SyncSheetsCodeBehind
+    MsgBox "All VBA code synced!", vbInformation
+End Sub
+
+'——————————————————————————————————————————————
+' Sync all .bas (Modules) and .cls (Class Modules)
+' by removing any existing component and re-importing.
+'——————————————————————————————————————————————
+Public Sub SyncModulesAndClasses()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    Dim fso       As Object
+    Dim vbProj    As VBIDE.VBProject
+    Dim folder    As Object
+    Dim fileItem  As Object
+    Dim compName  As String
+    Dim comp      As VBIDE.VBComponent
+    Dim folderCfg As Variant
+    Dim folderPath As String, fileExt As String
+
     Set fso = CreateObject("Scripting.FileSystemObject")
-    If Right(BASE_PATH, 1) <> "\" Or Not fso.FolderExists(BASE_PATH) Then
-        MsgBox "Base folder not found: " & BASE_PATH, vbExclamation
+    Set vbProj = ThisWorkbook.VBProject
+
+    ' Define which folders to scan and which extensions to import
+    For Each folderCfg In Array( _
+        Array("Modules", "bas"), _
+        Array("Class Modules", "cls") _
+    )
+        folderPath = ROOT_PATH & folderCfg(0) & "\"
+        fileExt = folderCfg(1)
+
+        If fso.FolderExists(folderPath) Then
+            Set folder = fso.GetFolder(folderPath)
+            For Each fileItem In folder.Files
+                If LCase(fso.GetExtensionName(fileItem.Name)) = fileExt Then
+                    compName = fso.GetBaseName(fileItem.Name)
+
+                    ' Skip the import/export module itself
+                    If fileExt = "bas" And LCase(compName) = "modexportimportall" Then
+                        GoTo NextFile
+                    End If
+
+                    ' Remove any existing component with the same name
+                    For Each comp In vbProj.VBComponents
+                        If StrComp(comp.Name, compName, vbTextCompare) = 0 Then
+                            vbProj.VBComponents.Remove comp
+                            Exit For
+                        End If
+                    Next comp
+
+                    ' Import the fresh .bas/.cls file
+                    vbProj.VBComponents.Import fileItem.Path
+                End If
+NextFile:
+            Next fileItem
+        End If
+    Next folderCfg
+
+    MsgBox "Modules and Class Modules synced!", vbInformation
+End Sub
+'updates code to whatever is in ROOT_PATH & Forms
+Public Sub SyncFormsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    Dim fso     As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj  As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder  As Object, fileItem As Object
+    Dim fileText As String, lines As Variant
+    Dim i        As Long, startIdx As Long
+    Dim codeBody As String
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    Dim lineText As String
+
+    If Not fso.FolderExists(ROOT_PATH & "Forms\") Then Exit Sub
+    Set folder = fso.GetFolder(ROOT_PATH & "Forms\")
+
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "frm" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+
+            If vbComp Is Nothing Then
+                Debug.Print "Form not in project: " & compName
+            Else
+                fileText = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+                lines = Split(fileText, vbCrLf)
+
+                ' find first real code line
+                startIdx = -1
+                For i = LBound(lines) To UBound(lines)
+                    lineText = Trim(lines(i))
+                    If lineText = "Option Explicit" _
+                       Or LCase(Left(lineText, 4)) = "sub " _
+                       Or LCase(Left(lineText, 8)) = "function" _
+                       Or LCase(Left(lineText, 7)) = "private" _
+                       Or LCase(Left(lineText, 6)) = "public " Then
+                        startIdx = i: Exit For
+                    End If
+                Next i
+
+                If startIdx >= 0 Then
+                    codeBody = ""
+                    For i = startIdx To UBound(lines)
+                        codeBody = codeBody & lines(i) & vbCrLf
+                    Next i
+                    With vbComp.CodeModule
+                        .DeleteLines 1, .CountOfLines
+                        .InsertLines 1, codeBody
+                    End With
+                Else
+                    Debug.Print "  ? no code found in " & fileItem.Name
+                End If
+            End If
+        End If
+    Next fileItem
+
+    MsgBox "Forms code-behind synced.", vbInformation
+End Sub
+
+' Updates Sheet (Microsoft Excel Objects) code to whatever is in ROOT_PATH
+Public Sub SyncSheetsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso       As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj    As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder    As Object, fileItem As Object
+    Dim txt       As String, lines As Variant
+    Dim codeBody  As String
+    Dim i         As Long
+    Dim trimmed   As String, lowerText As String
+    Dim compName  As String
+    Dim vbComp    As VBIDE.VBComponent
+
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Sheets folder not found: " & ROOT_PATH, vbExclamation
+        Exit Sub
+    End If
+
+    Set folder = fso.GetFolder(ROOT_PATH)
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            If vbComp Is Nothing Then GoTo NextFile
+
+            txt = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+            lines = Split(txt, vbCrLf)
+            codeBody = ""
+
+            For i = LBound(lines) To UBound(lines)
+                trimmed = Trim(lines(i))
+                lowerText = LCase(trimmed)
+
+                If trimmed = "" Then
+                    ' preserve blank lines
+                    codeBody = codeBody & vbCrLf
+
+                ElseIf Not ( _
+                    lowerText Like "version *" Or _
+                    lowerText Like "begin*" Or _
+                    lowerText = "end" Or _
+                    lowerText Like "attribute *" Or _
+                    lowerText Like "mult?use *" _
+                ) Then
+                    codeBody = codeBody & lines(i) & vbCrLf
+                End If
+            Next i
+
+            With vbComp.CodeModule
+                .DeleteLines 1, .CountOfLines
+                .InsertLines 1, codeBody
+            End With
+
+            Set vbComp = Nothing
+        End If
+NextFile:
+    Next fileItem
+
+    MsgBox "Sheets code-behind synced!", vbInformation
+End Sub
+
+Public Sub SyncSheetsCodeBehind_Diagnostics()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso      As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj   As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder   As Object, fileItem As Object
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Folder not found: " & ROOT_PATH, vbExclamation
         Exit Sub
     End If
     
-    Set wbProj = ThisWorkbook.VBProject
-    
-    ' 1) Replace Sheet modules (only code inside existing sheet components)
-    If fso.FolderExists(BASE_PATH & "Sheets") Then
-        Set folder = fso.GetFolder(BASE_PATH & "Sheets")
-        For Each fileItem In folder.Files
-            If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
-                compName = fso.GetBaseName(fileItem.Name)
-                On Error Resume Next
-                Set vbComp = wbProj.VBComponents(compName)
-                On Error GoTo 0
-                If Not vbComp Is Nothing Then
-                    ' Read the .cls file text
-                    Set ts = fso.OpenTextFile(fileItem.Path, 1)
-                    codeText = ts.ReadAll
-    '--- after you read codeText = ts.ReadAll
-
-' Split into lines
-Dim arr() As String, i As Long, metaEnd As Long
-arr = Split(codeText, vbCrLf)
-
-' Find where the blank line follows the metadata header
-For i = LBound(arr) To UBound(arr)
-    If Trim(arr(i)) = "" Then
-        metaEnd = i
-        Exit For
-    End If
-Next i
-
-' Rebuild codeText from the line after metadata
-If metaEnd > 0 Then
-    Dim body As String
-    For i = metaEnd + 1 To UBound(arr)
-        body = body & arr(i) & vbCrLf
-    Next i
-    codeText = body
-End If
-
-' Now delete the old lines and insert only body
-With vbComp.CodeModule
-    .DeleteLines 1, .CountOfLines
-    .InsertLines 1, codeText
-End With
-                
-                    ts.Close
-                    ' Replace all lines in the sheet module
-                    With vbComp.CodeModule
-                        .DeleteLines 1, .CountOfLines
-                        .InsertLines 1, codeText
-                    End With
-                End If
+    Set folder = fso.GetFolder(ROOT_PATH)
+    Debug.Print "=== Files in Sheets\ ==="
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            Debug.Print "File: "; fileItem.Name; " ? looking for component: "; compName
+            
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            
+            If vbComp Is Nothing Then
+                Debug.Print "   ? No matching VBComponent for "; compName
+            Else
+                Debug.Print "   ? Found VBComponent: "; vbComp.Name
+                ' (Here you could inject your DeleteLines/InsertLines logic)
             End If
-        Next fileItem
-    End If
-    
-    ' 2) For Forms, Standard Modules, and Class Modules: remove & re-import
-    subFolders = Array( _
-        Array("Forms", "frm", "vbext_ct_MSForm"), _
-        Array("Modules", "bas", "vbext_ct_StdModule"), _
-        Array("Class Modules", "cls", "vbext_ct_ClassModule") _
-    )
-    For Each sf In subFolders
-        If fso.FolderExists(BASE_PATH & sf(0)) Then
-            Set folder = fso.GetFolder(BASE_PATH & sf(0))
-            For Each fileItem In folder.Files
-                ext = LCase(fso.GetExtensionName(fileItem.Name))
-                If ext = sf(1) Then
-                    compName = fso.GetBaseName(fileItem.Name)
-                    ' Remove old component if it exists
-                    On Error Resume Next
-                    Set vbComp = wbProj.VBComponents(compName)
-                    If Not vbComp Is Nothing Then
-                        wbProj.VBComponents.Remove vbComp
-                    End If
-                    On Error GoTo 0
-                    ' Import the new component file
-                    wbProj.VBComponents.Import fileItem.Path
-                End If
-            Next fileItem
+            Set vbComp = Nothing
         End If
-    Next sf
+    Next fileItem
     
-    MsgBox "All VBA code replaced from exported folders!", vbInformation
+    MsgBox "Diagnostics complete—check the Immediate window (Ctrl+G).", vbInformation
 End Sub
 
+' Exports all tables, headers, and controls (ActiveX & Forms) and lists all sheets
 Sub ExportTablesHeadersAndControls()
     Dim ws As Worksheet
     Dim lo As ListObject
@@ -229,7 +344,7 @@ Sub ExportTablesHeadersAndControls()
     Close #Fnum
     MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
 End Sub
-    
+' Exports all UserForm controls and their properties to a text file
 Sub ExportUserFormControls()
     Dim vbProj As VBIDE.VBProject
     Dim vbComp As VBIDE.VBComponent
@@ -263,7 +378,6 @@ End Sub
 
 ' Requires reference to “Microsoft Visual Basic for Applications Extensibility 5.3”
 ' and Trust Center > Macro Settings > “Trust access to the VBA project object model” enabled.
-
 Public Sub ExportAllCodeToSingleFiles()
     Dim exportPath As String
     Dim wsFileNum   As Long, frmFileNum As Long
@@ -335,8 +449,12 @@ Public Sub ExportAllCodeToSingleFiles()
            vbInformation
 End Sub
 
-
-
-
-
+Sub ListSheetCodeNames()
+  Dim c As VBIDE.VBComponent
+  For Each c In ThisWorkbook.VBProject.VBComponents
+    If c.Type = vbext_ct_Document Then
+      Debug.Print "Sheet CodeName: "; c.Name
+    End If
+  Next
+End Sub
 
