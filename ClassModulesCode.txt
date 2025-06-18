@@ -1,0 +1,408 @@
+''''''''''''''''''''''''''''''''''''
+' Class Module: Xdebug
+''''''''''''''''''''''''''''''''''''
+'namespace=xvba_modules\Xdebug
+Public env As String
+'Example of Package Create by XVBA-CLI
+Private OS_TMP__FOLDER_PATH As String
+Private IMMEDIATE_FOLDER As String
+Private IMMEDIATE_FILE As String
+Private DEBUG_FILE_PATH As String
+Const EMPTY_TYPE = 0
+Const NULL_TYPE = 1
+Const ERROR_TYPE = 10
+Const INTEGER_TYPE = 2
+Const LONG_TYPE = 3
+Const SINGLE_TYPE = 4
+Const DOUBLE_TYPE = 5
+Const CURRENCY_TYPE = 6
+Const DATE_TYPE = 7
+Const DECIMAL_TYPE = 14
+Const LONG_LONG_TYPE = 20
+Const BOOLEAN_TYPE = 11
+Const STRING_TYPE = 8
+Const ARRAY_TYPE = 8204
+Const OBJECT_TYPE = 9
+Const VARIANT_TYPE = 12
+Const DATA_OBJECT_TYPE = 13
+Private Const MESSAGE_SPACE = "                              "
+Public errorSource As String
+Public errorTitle As String
+'/*
+'Flag for Actrive os Deactive VBA Debug.Print
+'*/
+Public vbaDebugPrintActive As Boolean
+Private Sub class_initialize()
+     Dim fso  As Object
+     Set fso = CreateObject("Scripting.FileSystemObject")
+     OS_TMP__FOLDER_PATH = fso.GetSpecialFolder(2)
+     IMMEDIATE_FOLDER = "xvba_immediate"
+     IMMEDIATE_FILE = "immediate.txt"
+     vbaDebugPrintActive = True
+     errorSource = ""
+     errorTitle = "XVBA: New Error Was Found"
+     env = "DEV"
+     DEBUG_FILE_PATH = OS_TMP__FOLDER_PATH & "\" & IMMEDIATE_FOLDER & "\" & IMMEDIATE_FILE
+End Sub
+Public Function printx(inputValue As Variant, Optional messageType As Integer = 1)
+     If (env = "DEV") Then
+          Dim messageText  As String
+          messageText = createOutputMessage(inputValue)
+          Call writeDebugFileContent(messageText, messageType)
+     End If
+End Function
+'/*
+'Print A Error
+'
+'*/
+Public Function printError()
+     If (env = "DEV") Then
+          Dim message As String
+          message = ErrorHanddler()
+          Call writeDebugFileContent(message, 0)
+     End If
+End Function
+'/*
+'
+'Write Debug ino on File
+'
+'
+'*/
+Private Function writeDebugFileContent(messageText, messageType)
+     Dim filePath As String
+     Dim FileNum As Integer
+     Dim PREFIX As String
+     filePath = DEBUG_FILE_PATH
+     FileNum = FreeFile
+     PREFIX = Now & " - "
+     Open filePath For Append As #FileNum
+     Dim debugMessage As String
+     Select Case messageType
+      Case 0 'Error Message
+          debugMessage = PREFIX & "Error:" & messageText
+      Case 1 'Success
+          debugMessage = PREFIX & messageText
+      Case Else 'No Type Set
+          debugMessage = PREFIX & "Info:" & messageText
+     End Select
+     Print #FileNum, debugMessage
+     Close #FileNum
+     If (vbaDebugPrintActive) Then
+          Debug.Print debugMessage
+     End If
+End Function
+Private Function createOutputMessage(inputValue) As String
+     Dim typeOfVar As Integer
+     Dim response As String
+     typeOfVar = VarType(inputValue)
+     'Set Error Source Macro/Function name
+     Err.Source = "createOutputMessage"
+     Select Case typeOfVar
+      Case STRING_TYPE
+          response = "String: " & inputValue
+      Case INTEGER_TYPE
+          response = "Integer: " & CStr(inputValue)
+      Case LONG_TYPE
+          response = "Long: " & CStr(inputValue)
+      Case SINGLE_TYPE
+          response = "Single: " & CStr(inputValue)
+      Case DOUBLE_TYPE
+          response = "Double: " & CStr(inputValue)
+      Case CURRENCY_TYPE
+          response = "Currenty: " & CStr(inputValue)
+      Case DATE_TYPE
+          response = "Date: " & CStr(inputValue)
+      Case DECIMAL_TYPE
+          response = "Decimal: " & CStr(inputValue)
+      Case LONG_LONG_TYPE
+          response = "LongLong: " & CStr(inputValue)
+      Case BOOLEAN_TYPE
+          response = "Boolean: " & CStr(inputValue)
+      Case ARRAY_TYPE
+          response = makeArrayTypeMessage(inputValue)
+      Case EMPTY_TYPE
+          response = "Empty: "
+      Case OBJECT_TYPE
+          response = "Object: " & TypeName(inputValue)
+      Case NULL_TYPE
+          response = "Null: "
+      Case ERROR_TYPE
+          response = "Error: "
+      Case VARIANT_TYPE
+          response = "Variant: "
+      Case DATA_OBJECT_TYPE
+          response = "Data Object: " & TypeName(inputValue)
+      Case Else
+          response = "Type Not Supported yet please inform xvba developer "
+          Debug.Print typeOfVar
+          Debug.Print inputValue
+     End Select
+     createOutputMessage = response
+End Function
+Private Function makeArrayTypeMessage(inputValue) As String
+     Dim nextItem As Variant
+     Dim response As String
+     Dim message As String
+     For Each nextItem In inputValue
+          message = createOutputMessage(nextItem)
+          response = response & "                              [ " & message & " ]" & vbCrLf
+     Next nextItem
+     makeArrayTypeMessage = "Array: " & vbCrLf & response
+End Function
+Private Function ErrorHanddler() As String
+     Dim errorDescription As String
+     Dim numberDescription As String
+     Dim lineError As String
+     Dim sourceError As String
+     Dim errorTitleMsg As String
+     Dim errorSourceMsg As String
+     errorTitleMsg = vbCrLf & MESSAGE_SPACE & errorTitle
+     errorSourceMsg = vbCrLf & MESSAGE_SPACE & "Error Source: " & errorSource
+     Select Case Err.Number
+      Case 11
+          numberDescription = vbCrLf & MESSAGE_SPACE & "Error Number: " & Err.Number
+          lineError = vbCrLf & MESSAGE_SPACE & "Error Line: " & Erl
+          errorDescription = vbCrLf & MESSAGE_SPACE & "Error Description: " & Err.Description
+      Case Else
+          numberDescription = vbCrLf & MESSAGE_SPACE & "Error Number: " & Err.Number
+          errorDescription = vbCrLf & MESSAGE_SPACE & "Error Description: " & Err.Description
+     End Select
+     ErrorHanddler = errorTitleMsg & lineError & errorSourceMsg & numberDescription & errorDescription
+End Function
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsBulkSnapshot
+''''''''''''''''''''''''''''''''''''
+'// CLASS MODULE: clsBulkSnapshot,a part of UR (UndoRedo system)
+Option Explicit
+Public SnapshotID As String
+Public data As Variant  ' Stores inventory values
+Public Formulas As Object ' Stores formulas using a Dictionary
+Public SchemaHash As String
+Public timestamp As Date
+' Initialize Dictionary in Class Constructor
+Private Sub class_initialize()
+    Set Formulas = CreateObject("Scripting.Dictionary") ' ? Fix: Initialize Dictionary
+End Sub
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsUndoAction
+''''''''''''''''''''''''''''''''''''
+'// CLASS MODULE: clsUndoAction, a part of UR (UndoRedo system)
+Option Explicit
+Public ActionType As String
+Public ItemCode As String
+Public ColumnName As String
+Public OldValue As Variant
+Public newValue As Variant
+Public SnapshotID As String
+Public timestamp As Date
+Public logData As Collection
+Public LogCount As Long
+Public RedoSnapshotID As String
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: MouseOverControl
+''''''''''''''''''''''''''''''''''''
+'''=============================================================================
+''' VBA UserForm MouseScroll
+''' --------------------------------------------------------
+''' https://github.com/cristianbuse/VBA-UserForm-MouseScroll
+''' --------------------------------------------------------
+''' MIT License
+'''
+''' Copyright (c) 2019 Ion Cristian Buse
+'''
+''' Permission is hereby granted, free of charge, to any person obtaining a copy
+''' of this software and associated documentation files (the "Software"), to
+''' deal in the Software without restriction, including without limitation the
+''' rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+''' sell copies of the Software, and to permit persons to whom the Software is
+''' furnished to do so, subject to the following conditions:
+'''
+''' The above copyright notice and this permission notice shall be included in
+''' all copies or substantial portions of the Software.
+'''
+''' THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+''' IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+''' FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+''' AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+''' LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+''' FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+''' IN THE SOFTWARE.
+'''=============================================================================
+''
+''==============================================================================
+'' Description:
+''    - This object holds a single reference to a MSForms.UserForm or a
+''      MSForms.Control that is capable of having a MouseMove event
+''    - The reference is set using the InitFromControl method and can be any of
+''      the 13 types listed below
+''    - When the MouseMove event is triggered, the hovered control is passed to
+''      the SetHoveredControl method in the MouseScroll module
+''    - This class is also used as an asyncronous callback via the Terminate
+'       event. In this case events are not used. This choice removed the need
+''      to use a new class just for the Terminate event
+'' Notes:
+''    This class implements Scroll events for the container types (frame, form
+''       and multiPage) in order to supress any scrolls that are related to the
+''       controls getting the focus.
+'' Requires:
+''    - MouseScroll: module enabling Mouse Message processing
+''==============================================================================
+Option Explicit
+'Control types (MSForms.Control or MSForms.UserForm)
+Private WithEvents m_CheckBox As MSForms.CheckBox
+Private WithEvents m_ComboBox As MSForms.ComboBox
+Private WithEvents m_CommandButton As MSForms.CommandButton
+Private WithEvents m_Frame As MSForms.Frame
+Private WithEvents m_Image As MSForms.Image
+Private WithEvents m_Label As MSForms.Label
+Private WithEvents m_ListBox As MSForms.ListBox
+Private WithEvents m_MultiPage As MSForms.MultiPage
+Private WithEvents m_OptionButton As MSForms.OptionButton
+Private WithEvents m_TabStrip As MSForms.TabStrip
+Private WithEvents m_TextBox As MSForms.TextBox
+Private WithEvents m_ToggleButton As MSForms.ToggleButton
+Private WithEvents m_UserForm As MSForms.UserForm
+'Late-binded control/form
+Private m_control As Object
+#If VBA7 Then
+    Private m_hWndForm As LongPtr
+#Else
+    Private m_hWndForm As Long
+#End If
+Private m_isCallback As Boolean
+#If VBA7 Then
+Public Function CreateFromControl(ByVal formControl As MSForms.Control, ByVal hWndForm As LongPtr) As MouseOverControl
+#Else
+Public Function CreateFromControl(ByVal formControl As MSForms.Control, ByVal hWndForm As Long) As MouseOverControl
+#End If
+    Dim moControl As MouseOverControl
+    Set moControl = New MouseOverControl
+    moControl.InitFromControl formControl, hWndForm
+    Set CreateFromControl = moControl
+End Function
+#If VBA7 Then
+Public Function CreateFromForm(ByVal uForm As MSForms.UserForm, ByVal hWndForm As LongPtr) As MouseOverControl
+#Else
+Public Function CreateFromForm(ByVal uForm As MSForms.UserForm, ByVal hWndForm As Long) As MouseOverControl
+#End If
+    Dim moControl As MouseOverControl
+    Set moControl = New MouseOverControl
+    moControl.InitFromForm uForm, hWndForm
+    Set CreateFromForm = moControl
+End Function
+#If VBA7 Then
+Public Sub InitFromControl(ByVal formControl As MSForms.Control, ByVal hWndForm As LongPtr)
+#Else
+Public Sub InitFromControl(ByVal formControl As MSForms.Control, ByVal hWndForm As Long)
+#End If
+    Set m_control = formControl
+    m_hWndForm = hWndForm
+    Select Case TypeName(formControl)
+        Case "CheckBox":      Set m_CheckBox = formControl
+        Case "ComboBox":      Set m_ComboBox = formControl
+        Case "CommandButton": Set m_CommandButton = formControl
+        Case "Frame":         Set m_Frame = formControl
+        Case "Image":         Set m_Image = formControl
+        Case "Label":         Set m_Label = formControl
+        Case "ListBox":       Set m_ListBox = formControl
+        Case "MultiPage":     Set m_MultiPage = formControl
+        Case "OptionButton":  Set m_OptionButton = formControl
+        Case "TabStrip":      Set m_TabStrip = formControl
+        Case "TextBox":       Set m_TextBox = formControl
+        Case "ToggleButton":  Set m_ToggleButton = formControl
+    End Select
+End Sub
+#If VBA7 Then
+Public Sub InitFromForm(ByVal uForm As MSForms.UserForm, ByVal hWndForm As LongPtr)
+#Else
+Public Sub InitFromForm(ByVal uForm As MSForms.UserForm, ByVal hWndForm As Long)
+#End If
+    Set m_control = uForm
+    m_hWndForm = hWndForm
+    Set m_UserForm = uForm
+End Sub
+'MouseMove Events
+Private Sub m_CheckBox_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_ComboBox_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_CommandButton_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_Frame_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_Image_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_Label_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_ListBox_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_ListView_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As stdole.OLE_XPOS_PIXELS, ByVal y As stdole.OLE_YPOS_PIXELS)
+    SetHoveredControl Me
+End Sub
+Private Sub m_MultiPage_MouseMove(ByVal Index As Long, ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_OptionButton_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub M_TabStrip_MouseMove(ByVal Index As Long, ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_TextBox_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_ToggleButton_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+Private Sub m_UserForm_MouseMove(ByVal Button As Integer, ByVal Shift As Integer, ByVal x As Single, ByVal y As Single)
+    SetHoveredControl Me
+End Sub
+'Scroll Event for Containers. This cancels out any scroll that is triggered by a
+'   control getting the focus - especially TextBoxes on .SetFocus
+Private Sub m_UserForm_Scroll(ByVal ActionX As MSForms.fmScrollAction, ByVal ActionY As MSForms.fmScrollAction, ByVal RequestDx As Single, ByVal RequestDy As Single, ByVal ActualDx As MSForms.ReturnSingle, ByVal ActualDy As MSForms.ReturnSingle)
+    If ActionY = fmScrollActionFocusRequest Or ActionY = fmScrollActionControlRequest Then ActualDy = 0
+    If ActionX = fmScrollActionFocusRequest Or ActionX = fmScrollActionControlRequest Then ActualDx = 0
+End Sub
+Private Sub m_Frame_Scroll(ByVal ActionX As MSForms.fmScrollAction, ByVal ActionY As MSForms.fmScrollAction, ByVal RequestDx As Single, ByVal RequestDy As Single, ByVal ActualDx As MSForms.ReturnSingle, ByVal ActualDy As MSForms.ReturnSingle)
+    If ActionY = fmScrollActionFocusRequest Or ActionY = fmScrollActionControlRequest Then ActualDy = 0
+    If ActionX = fmScrollActionFocusRequest Or ActionX = fmScrollActionControlRequest Then ActualDx = 0
+End Sub
+Private Sub m_MultiPage_Scroll(ByVal Index As Long, ByVal ActionX As MSForms.fmScrollAction, ByVal ActionY As MSForms.fmScrollAction, ByVal RequestDx As Single, ByVal RequestDy As Single, ByVal ActualDx As MSForms.ReturnSingle, ByVal ActualDy As MSForms.ReturnSingle)
+    If ActionY = fmScrollActionFocusRequest Or ActionY = fmScrollActionControlRequest Then ActualDy = 0
+    If ActionX = fmScrollActionFocusRequest Or ActionX = fmScrollActionControlRequest Then ActualDx = 0
+End Sub
+Public Function GetControl() As Object
+    Set GetControl = m_control
+End Function
+#If VBA7 Then
+Public Property Get FormHandle() As LongPtr
+#Else
+Public Property Get FormHandle() As Long
+#End If
+    FormHandle = m_hWndForm
+End Property
+Public Property Let IsAsyncCallback(ByVal newValue As Boolean)
+    m_isCallback = newValue
+End Property
+Private Sub Class_Terminate()
+    If m_isCallback Then ProcessMouseData
+End Sub
+
+
+
