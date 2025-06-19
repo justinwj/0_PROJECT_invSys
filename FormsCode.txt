@@ -1,15 +1,4 @@
 ''''''''''''''''''''''''''''''''''''
-' UserForm: frmAdminControls
-''''''''''''''''''''''''''''''''''''
-Private Sub btnCreateDeleteUser_Click()
-    frmCreateDeleteUser.Show
-End Sub
-Private Sub btnEditUser_Click()
-    frmEditUser.Show
-End Sub
-
-
-''''''''''''''''''''''''''''''''''''
 ' UserForm: frmAdminEmail
 ''''''''''''''''''''''''''''''''''''
 
@@ -112,6 +101,8 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmEditUser
 ''''''''''''''''''''''''''''''''''''
@@ -170,11 +161,11 @@ Private Sub btnUpdateUser_Click()
             Me.lblMessages.Caption = "PIN must be exactly 6 digits."
             Exit Sub
         End If
-        foundUser.offset(0, colPIN - colUsername).value = newPIN
+        foundUser.Offset(0, colPIN - colUsername).value = newPIN
     End If
     ' Update role if a new one is selected
     If newRole <> "" Then
-        foundUser.offset(0, colRole - colUsername).value = newRole
+        foundUser.Offset(0, colRole - colUsername).value = newRole
     End If
     ' Confirmation message
     Me.lblMessages.Caption = "User updated successfully."
@@ -186,6 +177,8 @@ Private Sub btnNewPIN_Click()
     ' Display the generated PIN in txtPIN
     Me.txtNewPIN.value = randomPIN
 End Sub
+
+
 
 
 
@@ -727,6 +720,9 @@ End Sub
 
 
 
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmLogin
 ''''''''''''''''''''''''''''''''''''
@@ -757,9 +753,9 @@ Private Sub btnLogin_Click()
     Set foundUser = tbl.ListColumns("USERNAME").DataBodyRange.Find(What:=username, LookAt:=xlWhole)
     If Not foundUser Is Nothing Then
         ' Check PIN
-        If foundUser.offset(0, pinCol - usernameCol).value = pin Then
+        If foundUser.Offset(0, pinCol - usernameCol).value = pin Then
             ' Update last login time
-            foundUser.offset(0, lastLoginCol - usernameCol).value = Now
+            foundUser.Offset(0, lastLoginCol - usernameCol).value = Now
             ' Update message label instead of showing a popup
             Me.lblMessage.Caption = "Login successful"
             ' Close login form
@@ -789,10 +785,11 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmReceivedTally
 ''''''''''''''''''''''''''''''''''''
-' Handle btnSend click event
 Private Sub btnSend_Click()
     On Error GoTo ErrorHandler
     ' Process the data first
@@ -1073,10 +1070,12 @@ End Function
 
 
 
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmShipmentsTally
 ''''''''''''''''''''''''''''''''''''
-' Handle btnSend click event
 Private Sub btnSend_Click()
     SendOrderData
     Unload Me
@@ -1217,6 +1216,8 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmReceivingSavedList
 ''''''''''''''''''''''''''''''''''''
@@ -1261,6 +1262,29 @@ End Sub
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmCreateSubstitutionList
 ''''''''''''''''''''''''''''''''''''
+
+
+
+''''''''''''''''''''''''''''''''''''
+' UserForm: frmAdminControls
+''''''''''''''''''''''''''''''''''''
+Private Sub btnCreateDeleteUser_Click()
+    frmCreateDeleteUser.Show
+End Sub
+Private Sub btnEditUser_Click()
+    frmEditUser.Show
+End Sub
+
+''''''''''''''''''''''''''''''''''''
+' Component: ThisWorkbook
+''''''''''''''''''''''''''''''''''''
+''''''''''''''''''''''''''''''''''''
+' Component: ThisWorkbook
+''''''''''''''''''''''''''''''''''''
+''''''''''''''''''''''''''''''''''''
+' Component: ThisWorkbook
+''''''''''''''''''''''''''''''''''''
+
 
 
 

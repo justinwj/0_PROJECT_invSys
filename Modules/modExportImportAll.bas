@@ -52,67 +52,75 @@ Sub ExportAllModules()
 End Sub
 
 Public Sub ReplaceAllCodeFromFiles()
-    SyncModulesAndClasses
+    SyncStandardModules
+    SyncClassModules
     SyncFormsCodeBehind
     SyncSheetsCodeBehind
     MsgBox "All VBA code synced!", vbInformation
 End Sub
-
-'——————————————————————————————————————————————
-' Sync all .bas (Modules) and .cls (Class Modules)
-' by removing any existing component and re-importing.
-'——————————————————————————————————————————————
-Public Sub SyncModulesAndClasses()
-    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
-    Dim fso       As Object
-    Dim vbProj    As VBIDE.VBProject
-    Dim folder    As Object
-    Dim fileItem  As Object
-    Dim compName  As String
-    Dim comp      As VBIDE.VBComponent
-    Dim folderCfg As Variant
-    Dim folderPath As String, fileExt As String
+' Sync only .bas modules by removing and re-importing
+Public Sub SyncStandardModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
 
     Set fso = CreateObject("Scripting.FileSystemObject")
     Set vbProj = ThisWorkbook.VBProject
 
-    ' Define which folders to scan and which extensions to import
-    For Each folderCfg In Array( _
-        Array("Modules", "bas"), _
-        Array("Class Modules", "cls") _
-    )
-        folderPath = ROOT_PATH & folderCfg(0) & "\"
-        fileExt = folderCfg(1)
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "bas" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            ' Skip the exporter module itself
+            If LCase(baseName) = "modexportimportall" Then GoTo NextStandard
+            filePath = fileItem.Path
 
-        If fso.FolderExists(folderPath) Then
-            Set folder = fso.GetFolder(folderPath)
-            For Each fileItem In folder.Files
-                If LCase(fso.GetExtensionName(fileItem.Name)) = fileExt Then
-                    compName = fso.GetBaseName(fileItem.Name)
-
-                    ' Skip the import/export module itself
-                    If fileExt = "bas" And LCase(compName) = "modexportimportall" Then
-                        GoTo NextFile
-                    End If
-
-                    ' Remove any existing component with the same name
-                    For Each comp In vbProj.VBComponents
-                        If StrComp(comp.Name, compName, vbTextCompare) = 0 Then
-                            vbProj.VBComponents.Remove comp
-                            Exit For
-                        End If
-                    Next comp
-
-                    ' Import the fresh .bas/.cls file
-                    vbProj.VBComponents.Import fileItem.Path
-                End If
-NextFile:
-            Next fileItem
+            On Error Resume Next
+            ' Remove existing module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh module
+            vbProj.VBComponents.Import filePath
         End If
-    Next folderCfg
-
-    MsgBox "Modules and Class Modules synced!", vbInformation
+NextStandard:
+    Next fileItem
+    ' Notify user when standard modules are imported
+    MsgBox "Standard modules imported successfully!", vbInformation
 End Sub
+
+' Sync only .cls class modules by removing and re-importing
+Public Sub SyncClassModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Class Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = ThisWorkbook.VBProject
+
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            filePath = fileItem.Path
+
+            On Error Resume Next
+            ' Remove existing class module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh class module
+            vbProj.VBComponents.Import filePath
+        End If
+    Next fileItem
+    ' Notify user when class modules are imported
+    MsgBox "Class modules imported successfully!", vbInformation
+End Sub
+    
 'updates code to whatever is in ROOT_PATH & Forms
 Public Sub SyncFormsCodeBehind()
     Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
@@ -275,7 +283,6 @@ Public Sub SyncSheetsCodeBehind_Diagnostics()
     MsgBox "Diagnostics complete—check the Immediate window (Ctrl+G).", vbInformation
 End Sub
 
-' Exports all tables, headers, and controls (ActiveX & Forms) and lists all sheets
 Sub ExportTablesHeadersAndControls()
     Dim ws As Worksheet
     Dim lo As ListObject
@@ -344,7 +351,6 @@ Sub ExportTablesHeadersAndControls()
     Close #Fnum
     MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
 End Sub
-' Exports all UserForm controls and their properties to a text file
 Sub ExportUserFormControls()
     Dim vbProj As VBIDE.VBProject
     Dim vbComp As VBIDE.VBComponent
@@ -378,6 +384,7 @@ End Sub
 
 ' Requires reference to “Microsoft Visual Basic for Applications Extensibility 5.3”
 ' and Trust Center > Macro Settings > “Trust access to the VBA project object model” enabled.
+
 Public Sub ExportAllCodeToSingleFiles()
     Dim exportPath As String
     Dim wsFileNum   As Long, frmFileNum As Long

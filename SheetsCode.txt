@@ -1,6 +1,7 @@
 ''''''''''''''''''''''''''''''''''''
 ' Component: ThisWorkbook
 ''''''''''''''''''''''''''''''''''''
+
 Private Sub Workbook_Open()
     ' Make sure Excel events are enabled
     Application.EnableEvents = True
@@ -24,9 +25,12 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: InventoryManagement
 ''''''''''''''''''''''''''''''''''''
+
 Private Sub Worksheet_Change(ByVal Target As Range)
     Dim tbl As ListObject
     Dim emptyRows As Range
@@ -107,14 +111,31 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: Recipes
 ''''''''''''''''''''''''''''''''''''
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: UserCredentials
+''''''''''''''''''''''''''''''''''''
+
+''''''''''''''''''''''''''''''''''''
+' here is some new text for the sheet UserCredentials
+' This class is used to manage user credentials in the system.
+''''''''''''''''''''''''''''''''''''
+''''''''''''''''''''''''''''''''''''
+' here is some new text for the sheet UserCredentials
+' This class is used to manage user credentials in the system.
+''''''''''''''''''''''''''''''''''''
+''''''''''''''''''''''''''''''''''''
+' here is some new text for the sheet UserCredentials
+' This class is used to manage user credentials in the system.
 ''''''''''''''''''''''''''''''''''''
 
 
@@ -125,11 +146,16 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: TestSummary
 ''''''''''''''''''''''''''''''''''''
+
 Sub RunTest_Click()
 End Sub
+
+
 
 
 
@@ -139,9 +165,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: Notes
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -151,9 +181,12 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: ReceivedTally
 ''''''''''''''''''''''''''''''''''''
+
 '=================
 'ReceivedTally.cls
 '=================
@@ -174,9 +207,12 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: ShipmentsTally
 ''''''''''''''''''''''''''''''''''''
+
 '===================
 ' ShipmentsTally.cls
 ' ==================
@@ -198,9 +234,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: ReceivedLog
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -210,9 +250,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: ProductionLog
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -222,9 +266,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: Substitutions
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -234,9 +282,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: Prediction
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -246,9 +298,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: CreateRecipe
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 
@@ -258,9 +314,13 @@ End Sub
 
 
 
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Component: IngredientsPalette
 ''''''''''''''''''''''''''''''''''''
+
+
 
 
 

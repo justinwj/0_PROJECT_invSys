@@ -1,4 +1,475 @@
 ''''''''''''''''''''''''''''''''''''
+' Module: modExportImportAll
+''''''''''''''''''''''''''''''''''''
+Option Explicit
+' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
+Sub ExportAllModules()
+    Dim vbComp As VBIDE.VBComponent
+    Dim exportPath As String
+    Dim fso As Object
+    Dim fileItem As Object
+
+    ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys"
+    ' Ensure trailing backslash
+    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
+
+    ' Make sure Excel is set to allow programmatic access to VBProject
+    ' (Trust Center > Macro Settings > Trust access to the VBA project object model)
+
+    For Each vbComp In ThisWorkbook.VBProject.VBComponents
+        Select Case vbComp.Type
+            Case vbext_ct_StdModule ' Standard Modules
+                On Error Resume Next
+                vbComp.Export exportPath & "Modules\" & vbComp.Name & ".bas"
+                On Error GoTo 0
+
+            Case vbext_ct_ClassModule ' Class Modules
+                On Error Resume Next
+                vbComp.Export exportPath & "Class Modules\" & vbComp.Name & ".cls"
+                On Error GoTo 0
+
+            Case vbext_ct_MSForm ' UserForms
+                On Error Resume Next
+                vbComp.Export exportPath & "Forms\" & vbComp.Name & ".frm"
+                On Error GoTo 0
+
+            Case vbext_ct_Document ' Sheets and ThisWorkbook
+                On Error Resume Next
+                vbComp.Export exportPath & "Sheets\" & vbComp.Name & ".cls"
+                On Error GoTo 0
+        End Select
+    Next vbComp
+
+    ' Remove FRX files from the Forms folder, if present
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If fso.FolderExists(exportPath & "Forms") Then
+        For Each fileItem In fso.GetFolder(exportPath & "Forms").Files
+            If LCase(fso.GetExtensionName(fileItem.Name)) = "frx" Then
+                fileItem.Delete True
+            End If
+        Next fileItem
+    End If
+
+    MsgBox "Export complete!"
+End Sub
+
+Public Sub ReplaceAllCodeFromFiles()
+    SyncStandardModules
+    SyncClassModules
+    SyncFormsCodeBehind
+    SyncSheetsCodeBehind
+    MsgBox "All VBA code synced!", vbInformation
+End Sub
+' Sync only .bas modules by removing and re-importing
+Public Sub SyncStandardModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = ThisWorkbook.VBProject
+
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "bas" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            ' Skip the exporter module itself
+            If LCase(baseName) = "modexportimportall" Then GoTo NextStandard
+            filePath = fileItem.Path
+
+            On Error Resume Next
+            ' Remove existing module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh module
+            vbProj.VBComponents.Import filePath
+        End If
+NextStandard:
+    Next fileItem
+    ' Notify user when standard modules are imported
+    MsgBox "Standard modules imported successfully!", vbInformation
+End Sub
+
+' Sync only .cls class modules by removing and re-importing
+Public Sub SyncClassModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Class Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = ThisWorkbook.VBProject
+
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            filePath = fileItem.Path
+
+            On Error Resume Next
+            ' Remove existing class module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh class module
+            vbProj.VBComponents.Import filePath
+        End If
+    Next fileItem
+    ' Notify user when class modules are imported
+    MsgBox "Class modules imported successfully!", vbInformation
+End Sub
+'updates code to whatever is in ROOT_PATH & Forms
+Public Sub SyncFormsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    Dim fso     As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj  As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder  As Object, fileItem As Object
+    Dim fileText As String, lines As Variant
+    Dim i        As Long, startIdx As Long
+    Dim codeBody As String
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    Dim lineText As String
+
+    If Not fso.FolderExists(ROOT_PATH & "Forms\") Then Exit Sub
+    Set folder = fso.GetFolder(ROOT_PATH & "Forms\")
+
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "frm" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+
+            If vbComp Is Nothing Then
+                Debug.Print "Form not in project: " & compName
+            Else
+                fileText = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+                lines = Split(fileText, vbCrLf)
+
+                ' find first real code line
+                startIdx = -1
+                For i = LBound(lines) To UBound(lines)
+                    lineText = Trim(lines(i))
+                    If lineText = "Option Explicit" _
+                       Or LCase(Left(lineText, 4)) = "sub " _
+                       Or LCase(Left(lineText, 8)) = "function" _
+                       Or LCase(Left(lineText, 7)) = "private" _
+                       Or LCase(Left(lineText, 6)) = "public " Then
+                        startIdx = i: Exit For
+                    End If
+                Next i
+
+                If startIdx >= 0 Then
+                    codeBody = ""
+                    For i = startIdx To UBound(lines)
+                        codeBody = codeBody & lines(i) & vbCrLf
+                    Next i
+                    With vbComp.CodeModule
+                        .DeleteLines 1, .CountOfLines
+                        .InsertLines 1, codeBody
+                    End With
+                Else
+                    Debug.Print "  ? no code found in " & fileItem.Name
+                End If
+            End If
+        End If
+    Next fileItem
+
+    MsgBox "Forms code-behind synced.", vbInformation
+End Sub
+
+' Updates Sheet (Microsoft Excel Objects) code to whatever is in ROOT_PATH
+Public Sub SyncSheetsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso       As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj    As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder    As Object, fileItem As Object
+    Dim txt       As String, lines As Variant
+    Dim codeBody  As String
+    Dim i         As Long
+    Dim trimmed   As String, lowerText As String
+    Dim compName  As String
+    Dim vbComp    As VBIDE.VBComponent
+
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Sheets folder not found: " & ROOT_PATH, vbExclamation
+        Exit Sub
+    End If
+
+    Set folder = fso.GetFolder(ROOT_PATH)
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            If vbComp Is Nothing Then GoTo NextFile
+
+            txt = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+            lines = Split(txt, vbCrLf)
+            codeBody = ""
+
+            For i = LBound(lines) To UBound(lines)
+                trimmed = Trim(lines(i))
+                lowerText = LCase(trimmed)
+
+                If trimmed = "" Then
+                    ' preserve blank lines
+                    codeBody = codeBody & vbCrLf
+
+                ElseIf Not ( _
+                    lowerText Like "version *" Or _
+                    lowerText Like "begin*" Or _
+                    lowerText = "end" Or _
+                    lowerText Like "attribute *" Or _
+                    lowerText Like "mult?use *" _
+                ) Then
+                    codeBody = codeBody & lines(i) & vbCrLf
+                End If
+            Next i
+
+            With vbComp.CodeModule
+                .DeleteLines 1, .CountOfLines
+                .InsertLines 1, codeBody
+            End With
+
+            Set vbComp = Nothing
+        End If
+NextFile:
+    Next fileItem
+
+    MsgBox "Sheets code-behind synced!", vbInformation
+End Sub
+
+Public Sub SyncSheetsCodeBehind_Diagnostics()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso      As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj   As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder   As Object, fileItem As Object
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Folder not found: " & ROOT_PATH, vbExclamation
+        Exit Sub
+    End If
+    
+    Set folder = fso.GetFolder(ROOT_PATH)
+    Debug.Print "=== Files in Sheets\ ==="
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            Debug.Print "File: "; fileItem.Name; " ? looking for component: "; compName
+            
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            
+            If vbComp Is Nothing Then
+                Debug.Print "   ? No matching VBComponent for "; compName
+            Else
+                Debug.Print "   ? Found VBComponent: "; vbComp.Name
+                ' (Here you could inject your DeleteLines/InsertLines logic)
+            End If
+            Set vbComp = Nothing
+        End If
+    Next fileItem
+    
+    MsgBox "Diagnostics complete—check the Immediate window (Ctrl+G).", vbInformation
+End Sub
+
+Sub ExportTablesHeadersAndControls()
+    Dim ws As Worksheet
+    Dim lo As ListObject
+    Dim lc As ListColumn
+    Dim ole As OLEObject
+    Dim shp As Shape
+    Dim folderPath As String, outputPath As String
+    Dim Fnum As Long, hdrs As String
+    Dim ctrlType As Long, ctrlTypeName As String
+    ' 1) Set your folder (must already exist)
+    folderPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+    ' 2) Append filename
+    outputPath = folderPath & "TablesHeadersAndControls.txt"
+    Fnum = FreeFile
+    Open outputPath For Output As #Fnum
+    For Each ws In ThisWorkbook.Worksheets
+        Print #Fnum, "Sheet (Tab):  " & ws.Name
+        Print #Fnum, "Sheet (Code): " & ws.CodeName
+        ' ? Tables & Headers ?
+        For Each lo In ws.ListObjects
+            Print #Fnum, "  Table: " & lo.Name
+            hdrs = ""
+            For Each lc In lo.ListColumns
+                hdrs = hdrs & lc.Name & ", "
+            Next lc
+            If Len(hdrs) > 0 Then hdrs = Left(hdrs, Len(hdrs) - 2)
+            Print #Fnum, "    Headers: " & hdrs
+        Next lo
+        ' ? ActiveX Controls ?
+        For Each ole In ws.OLEObjects
+            Print #Fnum, "  ActiveX Control: " & ole.Name & " (" & ole.progID & ")"
+            On Error Resume Next
+            Print #Fnum, "    LinkedCell: " & ole.LinkedCell
+            Print #Fnum, "    TopLeft: " & ole.TopLeftCell.Address(False, False)
+            Print #Fnum, "    Caption: " & ole.Object.Caption
+            Print #Fnum, "    Value: " & ole.Object.value
+            On Error GoTo 0
+        Next ole
+        ' ? Forms Controls ?
+        For Each shp In ws.Shapes
+            If shp.Type = msoFormControl Then
+                ctrlType = shp.FormControlType
+                Select Case ctrlType
+                    Case 0: ctrlTypeName = "Button"
+                    Case 1: ctrlTypeName = "Checkbox"
+                    Case 2: ctrlTypeName = "DropDown"
+                    Case 3: ctrlTypeName = "EditBox"
+                    Case 4: ctrlTypeName = "ListBox"
+                    Case 5: ctrlTypeName = "ScrollBar"
+                    Case 6: ctrlTypeName = "Spinner"
+                    Case Else: ctrlTypeName = "Unknown"
+                End Select
+                Print #Fnum, "  Form Control: " & shp.Name
+                Print #Fnum, "    Type: " & ctrlTypeName & " (" & ctrlType & ")"
+                On Error Resume Next
+                Print #Fnum, "    LinkedCell: " & shp.ControlFormat.LinkedCell
+                If shp.HasTextFrame Then
+                    Print #Fnum, "    Text: " & Replace(shp.TextFrame.Characters.text, vbCr, " ")
+                End If
+                On Error GoTo 0
+            End If
+        Next shp
+        Print #Fnum, String(60, "-")
+    Next ws
+    Close #Fnum
+    MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
+End Sub
+Sub ExportUserFormControls()
+    Dim vbProj As VBIDE.VBProject
+    Dim vbComp As VBIDE.VBComponent
+    Dim ctrl   As MSForms.Control
+    Dim outputPath As String, Fnum As Long
+    '? adjust folder as needed (must exist) ?
+    outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
+    Fnum = FreeFile
+    Open outputPath For Output As #Fnum
+    Set vbProj = ThisWorkbook.VBProject
+    For Each vbComp In vbProj.VBComponents
+        ' only UserForm components
+        If vbComp.Type = vbext_ct_MSForm Then
+            Print #Fnum, "UserForm: " & vbComp.Name
+            ' iterate its controls
+            For Each ctrl In vbComp.Designer.Controls
+                Print #Fnum, "  Control: " & ctrl.Name & " (" & TypeName(ctrl) & ")"
+                On Error Resume Next
+                ' many controls have a Caption
+                Print #Fnum, "    Caption: " & ctrl.Caption
+                ' and many have a Value
+                Print #Fnum, "    Value: " & ctrl.value
+                On Error GoTo 0
+            Next ctrl
+            Print #Fnum, String(50, "-")
+        End If
+    Next vbComp
+    Close #Fnum
+    MsgBox "UserForm controls exported to:" & vbCrLf & outputPath, vbInformation
+End Sub
+
+' Requires reference to “Microsoft Visual Basic for Applications Extensibility 5.3”
+' and Trust Center > Macro Settings > “Trust access to the VBA project object model” enabled.
+
+Public Sub ExportAllCodeToSingleFiles()
+    Dim exportPath As String
+    Dim wsFileNum   As Long, frmFileNum As Long
+    Dim clsFileNum  As Long, modFileNum As Long
+    Dim vbComp      As VBIDE.VBComponent
+    Dim codeMod     As VBIDE.CodeModule
+    
+    ' ? Modify this to your desired folder (must already exist)
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys"
+    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
+    
+    ' Open our four output files
+    wsFileNum = FreeFile: Open exportPath & "SheetsCode.txt" For Output As #wsFileNum
+    frmFileNum = FreeFile: Open exportPath & "FormsCode.txt" For Output As #frmFileNum
+    clsFileNum = FreeFile: Open exportPath & "ClassModulesCode.txt" For Output As #clsFileNum
+    modFileNum = FreeFile: Open exportPath & "StandardModulesCode.txt" For Output As #modFileNum
+    
+    ' Loop through every component in this workbook
+    For Each vbComp In ThisWorkbook.VBProject.VBComponents
+        Set codeMod = vbComp.CodeModule
+        Select Case vbComp.Type
+            Case vbext_ct_Document           ' Sheets & ThisWorkbook
+                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #wsFileNum, "' Component: " & vbComp.Name
+                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #wsFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #wsFileNum, vbCrLf
+            
+            Case vbext_ct_MSForm             ' UserForms
+                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #frmFileNum, "' UserForm: " & vbComp.Name
+                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #frmFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #frmFileNum, vbCrLf
+            
+            Case vbext_ct_ClassModule        ' Class modules
+                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #clsFileNum, "' Class Module: " & vbComp.Name
+                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #clsFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #clsFileNum, vbCrLf
+            
+            Case vbext_ct_StdModule          ' Standard (.bas) modules
+                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #modFileNum, "' Module: " & vbComp.Name
+                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #modFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #modFileNum, vbCrLf
+        End Select
+    Next vbComp
+    
+    ' Close all files
+    Close #wsFileNum
+    Close #frmFileNum
+    Close #clsFileNum
+    Close #modFileNum
+    
+    MsgBox "All code exported to:" & vbCrLf & _
+           exportPath & vbCrLf & _
+           "(SheetsCode.txt, FormsCode.txt, ClassModulesCode.txt, StandardModulesCode.txt)", _
+           vbInformation
+End Sub
+
+Sub ListSheetCodeNames()
+  Dim c As VBIDE.VBComponent
+  For Each c In ThisWorkbook.VBProject.VBComponents
+    If c.Type = vbext_ct_Document Then
+      Debug.Print "Sheet CodeName: "; c.Name
+    End If
+  Next
+End Sub
+
+
+
+''''''''''''''''''''''''''''''''''''
 ' Module: modAdmin
 ''''''''''''''''''''''''''''''''''''
 Sub Admin_Click()
@@ -7,6 +478,25 @@ End Sub
 Sub Open_CreateDeleteUser()
     frmCreateDeleteUser.Show
 End Sub
+
+''''''''''''''''''''''''''''''''''''
+' This module contains administrative functions for the application.
+' It includes functions to manage user accounts, roles, and permissions. yada yada
+' It also includes functions to manage application settings and configurations.
+' The functions in this module are used by the frmAdminControls form to perform administrative tasks.
+''''''''''''''''''''''''''''''''''''
+
+
+
+
+
+
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDynamicForms
+''''''''''''''''''''''''''''''''''''
 
 
 
@@ -62,7 +552,7 @@ Public Sub LogError(ByVal procedureName As String, ByVal errNumber As Long, ByVa
     ' Set the error log worksheet
     Set ws = ThisWorkbook.Sheets("ErrorLog")
     ' Find the next available row
-    Set newRow = ws.Cells(ws.Rows.count, 1).End(xlUp).offset(1, 0)
+    Set newRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Offset(1, 0)
     ' Record the error details
     newRow.Cells(1, 1).value = Now()  ' Timestamp
     newRow.Cells(1, 2).value = procedureName
@@ -78,6 +568,12 @@ Public Sub LogAndHandleError(ByVal procedureName As String)
         Err.Clear
     End If
 End Sub
+
+
+
+
+
+
 
 
 
@@ -181,6 +677,15 @@ End Function
 
 
 
+
+
+
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modInvLogs
 ''''''''''''''''''''''''''''''''''''
@@ -261,6 +766,15 @@ Public Sub ReAddBulkLogEntries(ByVal LogDataCollection As Collection)
         End With
     Next i
 End Sub
+
+
+
+
+
+
+
+
+
 
 
 
@@ -640,6 +1154,15 @@ End Sub
 
 
 
+
+
+
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modTestModule
 ''''''''''''''''''''''''''''''''''''
@@ -744,6 +1267,102 @@ ErrorHandler:
     ErrorHandler.HandleError "TestBoundaryConditions"
     Resume ExitSub
 End Sub
+
+
+
+
+
+
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modTS_Common
+''''''''''''''''''''''''''''''''''''
+Option Explicit
+' This module contains common functions used across the application
+Public Function GetUOMFromDataTable(item As String, ItemCode As String, rowNum As String) As String
+    Dim ws  As Worksheet
+    Dim tbl As ListObject
+    Dim findCol As Long
+    Dim cel As Range
+    
+    Set ws = ThisWorkbook.Sheets("ReceivedTally")
+    Set tbl = ws.ListObjects("invSysData_Receiving")
+    findCol = tbl.ListColumns("ROW").Index
+    
+    ' Match by ROW
+    If rowNum <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.value) = rowNum Then
+                GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    ' Match by ITEM_CODE
+    findCol = tbl.ListColumns("ITEM_CODE").Index
+    If ItemCode <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.value) = ItemCode Then
+                GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    ' Match by ITEM
+    findCol = tbl.ListColumns("ITEM").Index
+    For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+        If CStr(cel.value) = item Then
+            GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+            Exit Function
+        End If
+    Next
+    
+    GetUOMFromDataTable = ""
+End Function
+
+Public Function GetUOMFromInvSys(item As String, ItemCode As String, rowNum As String) As String
+    Dim ws  As Worksheet
+    Dim tbl As ListObject
+    Dim findCol As Long
+    Dim cel As Range
+    
+    Set ws = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Set tbl = ws.ListObjects("invSys")
+    
+    findCol = tbl.ListColumns("ROW").Index
+    If rowNum <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.value) = rowNum Then
+                GetUOMFromInvSys = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    findCol = tbl.ListColumns("ITEM_CODE").Index
+    If ItemCode <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.value) = ItemCode Then
+                GetUOMFromInvSys = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    findCol = tbl.ListColumns("ITEM").Index
+    For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+        If CStr(cel.value) = item Then
+            GetUOMFromInvSys = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).value
+            Exit Function
+        End If
+    Next
+    
+    GetUOMFromInvSys = ""
+End Function
 
 
 
@@ -958,6 +1577,15 @@ End Sub
 
 
 
+
+
+
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modTS_Log
 ''''''''''''''''''''''''''''''''''''
@@ -1053,6 +1681,12 @@ End Sub
 
 
 
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modTS_Tally
 ''''''''''''''''''''''''''''''''''''
@@ -1063,122 +1697,6 @@ Option Explicit
 ' This module is responsible for tallying orders and displaying them in a user form.
 ' Track if we're already running a tally operation
 Private isRunningTally As Boolean
-Sub TallyItems(sheetName As String, tableName As String, formToShow As Object)
-    ' Debug at beginning
-    Debug.Print "Starting TallyItems with: " & sheetName & ", " & tableName & ", " & TypeName(formToShow)
-    Dim ws As Worksheet
-    Dim tbl As ListObject
-    Dim dict As Object
-    Dim i As Long
-    Dim key As Variant
-    Dim item As Variant, quantity As Double, uom As Variant
-    Dim ItemCode As String, rowNum As String
-    Dim lb As MSForms.ListBox
-    Dim keyParts As Variant
-    Dim ctrl As MSForms.Control  ' Add this declaration for the ctrl variable
-    ' Error checking for the form
-    If formToShow Is Nothing Then
-        MsgBox "Error: Form reference is null", vbExclamation
-        Exit Sub
-    End If
-    ' Find the ListBox in the form
-    On Error Resume Next
-    Set lb = Nothing
-    For Each ctrl In formToShow.Controls
-        If TypeName(ctrl) = "ListBox" Then
-            Set lb = ctrl
-            Debug.Print "Found ListBox with name: " & ctrl.Name
-            Exit For
-        End If
-    Next ctrl
-    If lb Is Nothing Then
-        MsgBox "Error: The form doesn't have a ListBox control", vbExclamation
-        Exit Sub
-    End If
-    On Error GoTo 0
-    ' Continue with the rest of the function...
-    Set ws = ThisWorkbook.Sheets(sheetName)
-    Set tbl = ws.ListObjects(tableName)
-    Set dict = CreateObject("Scripting.Dictionary")
-    dict.CompareMode = vbTextCompare
-    ' Check if we have ROW and ITEM_CODE columns in the source table
-    Dim hasRowCol As Boolean, hasItemCodeCol As Boolean
-    Dim rowColIndex As Integer, itemCodeColIndex As Integer
-    On Error Resume Next
-    For i = 1 To tbl.ListColumns.count
-        If UCase(tbl.ListColumns(i).Name) = "ROW" Then
-            hasRowCol = True
-            rowColIndex = i
-        ElseIf UCase(tbl.ListColumns(i).Name) = "ITEM_CODE" Then
-            hasItemCodeCol = True
-            itemCodeColIndex = i
-        End If
-    Next i
-    On Error GoTo 0
-    ' Process all rows in the table
-    For i = 1 To tbl.ListRows.count
-        ' Get raw cell values
-        item = tbl.ListColumns("ITEMS").DataBodyRange(i, 1).value
-        quantity = tbl.ListColumns("QUANTITY").DataBodyRange(i, 1).value
-        uom = tbl.ListColumns("UOM").DataBodyRange(i, 1).value
-        ' Get ROW and ITEM_CODE if available
-        rowNum = ""
-        ItemCode = ""
-        If hasRowCol Then rowNum = tbl.DataBodyRange(i, rowColIndex).value
-        If hasItemCodeCol Then ItemCode = tbl.DataBodyRange(i, itemCodeColIndex).value
-        ' Skip rows where the item is empty or quantity is zero/empty
-        If Trim(CStr(item)) <> "" And quantity > 0 Then
-            ' Create a unique key that includes ROW if available
-            Dim uniqueKey As String
-            If rowNum <> "" Then
-                ' Use ROW for uniqueness (most specific)
-                uniqueKey = "ROW_" & rowNum
-            ElseIf ItemCode <> "" Then
-                ' Use ITEM_CODE as fallback
-                uniqueKey = "CODE_" & ItemCode
-            Else
-                ' Use item name and UOM as last resort
-                uniqueKey = "NAME_" & LCase(Trim(CStr(item))) & "|" & LCase(Trim(CStr(uom)))
-            End If
-            ' Tally items using the unique key
-            If dict.Exists(uniqueKey) Then
-                dict(uniqueKey) = dict(uniqueKey) + quantity
-            Else
-                dict.Add uniqueKey, quantity
-                ' Store reference information
-                uom = GetUOMFromDataTable(item, ItemCode, rowNum)
-                dict.Add "info_" & uniqueKey, Array(item, ItemCode, rowNum, uom)
-            End If
-        End If
-    Next i
-    ' Display the tally in the list box
-    lb.Clear
-    lb.ColumnCount = 5 ' ITEM, QTY, UOM, ITEM_CODE, ROW
-    lb.ColumnWidths = "150;50;50;0;0" ' Hide ITEM_CODE and ROW columns
-    ' Add header row
-    lb.AddItem "ITEMS"
-    lb.List(0, 1) = "QUANTITY"
-    lb.List(0, 2) = "UOM"
-    lb.List(0, 3) = "ITEM_CODE"
-    lb.List(0, 4) = "ROW"
-    ' Add data rows
-    If dict.count > 0 Then
-        For Each key In dict.Keys
-            If Left$(key, 5) <> "info_" Then
-                Dim itemInfo As Variant
-                itemInfo = dict("info_" & key)
-                lb.AddItem itemInfo(0) ' Item name
-                lb.List(lb.ListCount - 1, 1) = dict(key)   ' Quantity
-                lb.List(lb.ListCount - 1, 2) = itemInfo(3) ' UOM
-                lb.List(lb.ListCount - 1, 3) = itemInfo(1) ' ITEM_CODE
-                lb.List(lb.ListCount - 1, 4) = itemInfo(2) ' ROW
-            End If
-        Next key
-        formToShow.Show
-    Else
-        MsgBox "No valid items found to tally.", vbInformation
-    End If
-End Sub
 ' Helper function to normalize text
 Private Function NormalizeText(text As String) As String
     ' Trim and convert to lowercase for consistent matching
@@ -1330,223 +1848,113 @@ ErrorHandler:
     Debug.Print "Error in PopulateShipmentsForm: " & Err.Description
     Resume Next
 End Sub
-Sub PopulateReceivedForm(frm As frmReceivedTally)
-    On Error GoTo ErrorHandler
-    ' Debug info - show what we're doing
-    Debug.Print "PopulateReceivedForm: Starting to populate form..."
+
+Private Sub PopulateReceivedForm(frm As frmReceivedTally)
     Dim ws As Worksheet
-    Dim tbl As ListObject, dataTbl As ListObject
-    Dim dict As Object
-    Dim priceDict As Object
-    Dim uomDict As Object
-    Dim i As Long, j As Long, k As Long
+    Dim inputTbl As ListObject
+    Dim dataArr As Variant
+    Dim idxItems As Long, idxQty As Long, idxPrice As Long
+    Dim i As Long
+    Dim defaultUOM As String, uom As String
+    Dim itemName As String, qty As Double, prc As Double
+    Dim qtyDict As Object, priceDict As Object
     Dim key As Variant
-    Dim itemInfo As Variant
-    ' Get worksheet and table references
+
+    ' Initialize
+    defaultUOM = "N/A"
+    Set qtyDict = CreateObject("Scripting.Dictionary")
+    Set priceDict = CreateObject("Scripting.Dictionary")
     Set ws = ThisWorkbook.Sheets("ReceivedTally")
-    Set tbl = ws.ListObjects("ReceivedTally")
-    Set dataTbl = ws.ListObjects("invSysData_Receiving")
-    ' Check if table exists
-    If tbl Is Nothing Then
-        MsgBox "Error: ReceivedTally table not found!", vbCritical
+    Set inputTbl = ws.ListObjects("ReceivedTally")
+
+    ' Validate required columns
+    idxItems = ColumnIndex(inputTbl, "ITEMS")
+    idxQty = ColumnIndex(inputTbl, "QUANTITY")
+    idxPrice = ColumnIndex(inputTbl, "PRICE")
+    If idxItems * idxQty * idxPrice = 0 Then
+        Err.Raise vbObjectError + 2001, , _
+            "Required column missing in 'ReceivedTally': ITEMS, QUANTITY, or PRICE"
+    End If
+
+    ' Exit if no data rows
+    If inputTbl.DataBodyRange Is Nothing Then
+        frm.lstBox.Clear
         Exit Sub
     End If
-    ' DEBUG: Print column names to check actual structure
-    Debug.Print "Table columns in ReceivedTally:"
-    For i = 1 To tbl.ListColumns.count
-        Debug.Print i & ": " & tbl.ListColumns(i).Name
-    Next i
-    ' Verify required columns exist
-    Dim itemsColIndex As Long, qtyColIndex As Long, uomColIndex As Long, priceColIndex As Long
-    itemsColIndex = 0: qtyColIndex = 0: uomColIndex = 0: priceColIndex = 0
-    For i = 1 To tbl.ListColumns.count
-        Select Case UCase(tbl.ListColumns(i).Name)
-            Case "ITEMS": itemsColIndex = i
-            Case "QUANTITY": qtyColIndex = i
-            Case "UOM": uomColIndex = i
-            Case "PRICE": priceColIndex = i
-        End Select
-    Next i
-    ' Exit if required columns are missing
-    If itemsColIndex = 0 Then
-        MsgBox "Required column 'ITEMS' not found in ReceivedTally table", vbExclamation
-        Exit Sub
-    End If
-    If qtyColIndex = 0 Then
-        MsgBox "Required column 'QUANTITY' not found in ReceivedTally table", vbExclamation
-        Exit Sub
-    End If
-    ' Create dictionaries
-    Set dict = CreateObject("Scripting.Dictionary")     ' For quantities
-    Set priceDict = CreateObject("Scripting.Dictionary") ' For prices
-    Set uomDict = CreateObject("Scripting.Dictionary")   ' For UOMs
-    dict.CompareMode = vbTextCompare
-    ' Process items from invSysData_Receiving to get UOMs and prices
-    Dim dataItemsColIndex As Long, dataUOMColIndex As Long, dataPriceColIndex As Long
-    Dim dataItemCodeColIndex As Long, dataRowColIndex As Long
-    dataItemsColIndex = 0: dataUOMColIndex = 0: dataPriceColIndex = 0
-    dataItemCodeColIndex = 0: dataRowColIndex = 0
-    ' Get column indexes in data table
-    If Not dataTbl Is Nothing Then
-        For i = 1 To dataTbl.ListColumns.count
-            Select Case UCase(dataTbl.ListColumns(i).Name)
-                Case "ITEMS": dataItemsColIndex = i
-                Case "UOM": dataUOMColIndex = i
-                Case "PRICE": dataPriceColIndex = i
-                Case "ITEM_CODE": dataItemCodeColIndex = i
-                Case "ROW": dataRowColIndex = i
-            End Select
-        Next i
-        ' Build lookup dictionaries from data table
-        Dim dataUOMByItem As Object, dataPriceByItem As Object
-        Set dataUOMByItem = CreateObject("Scripting.Dictionary")
-        Set dataPriceByItem = CreateObject("Scripting.Dictionary")
-        For i = 1 To dataTbl.ListRows.count
-            Dim dataItem As String, dataUOM As String, dataPrice As Double
-            Dim dataItemCode As String, dataRow As String
-            On Error Resume Next
-            If dataItemsColIndex > 0 Then dataItem = CStr(dataTbl.DataBodyRange(i, dataItemsColIndex).value)
-            If dataUOMColIndex > 0 Then dataUOM = CStr(dataTbl.DataBodyRange(i, dataUOMColIndex).value)
-            If dataPriceColIndex > 0 Then
-                If IsNumeric(dataTbl.DataBodyRange(i, dataPriceColIndex).value) Then
-                    dataPrice = CDbl(dataTbl.DataBodyRange(i, dataPriceColIndex).value)
-                End If
-            End If
-            If dataItemCodeColIndex > 0 Then dataItemCode = CStr(dataTbl.DataBodyRange(i, dataItemCodeColIndex).value)
-            If dataRowColIndex > 0 Then dataRow = CStr(dataTbl.DataBodyRange(i, dataRowColIndex).value)
-            On Error GoTo ErrorHandler
-            ' Store by ROW first (most precise), ITEM_CODE second, item name last
-            If dataRow <> "" Then
-                If Not dataUOMByItem.Exists("ROW_" & dataRow) Then dataUOMByItem.Add "ROW_" & dataRow, dataUOM
-                If Not dataPriceByItem.Exists("ROW_" & dataRow) Then dataPriceByItem.Add "ROW_" & dataRow, dataPrice
-            End If
-            If dataItemCode <> "" Then
-                If Not dataUOMByItem.Exists("CODE_" & dataItemCode) Then dataUOMByItem.Add "CODE_" & dataItemCode, dataUOM
-                If Not dataPriceByItem.Exists("CODE_" & dataItemCode) Then dataPriceByItem.Add "CODE_" & dataItemCode, dataPrice
-            End If
-            If dataItem <> "" Then
-                If Not dataUOMByItem.Exists("NAME_" & LCase(Trim(dataItem))) Then dataUOMByItem.Add "NAME_" & LCase(Trim(dataItem)), dataUOM
-                If Not dataPriceByItem.Exists("NAME_" & LCase(Trim(dataItem))) Then dataPriceByItem.Add "NAME_" & LCase(Trim(dataItem)), dataPrice
-            End If
-        Next i
-    End If
-    ' Process and tally items from the table
-    For i = 1 To tbl.ListRows.count
-        On Error Resume Next
-        ' Use verified column indexes
-        Dim item As String, quantity As Double, uom As String, price As Double
-        item = CStr(tbl.DataBodyRange(i, itemsColIndex).value)
-        Dim rawQuantity As Variant
-        rawQuantity = tbl.DataBodyRange(i, qtyColIndex).value
-        If IsNumeric(rawQuantity) Then
-            quantity = CDbl(rawQuantity)
+
+    dataArr = inputTbl.DataBodyRange.value
+
+    ' Aggregate quantities and prices by item name
+    For i = LBound(dataArr, 1) To UBound(dataArr, 1)
+        itemName = CStr(dataArr(i, idxItems))
+        qty = Val(dataArr(i, idxQty))
+        prc = Val(dataArr(i, idxPrice))
+        If qtyDict.Exists(itemName) Then
+            qtyDict(itemName) = qtyDict(itemName) + qty
+            priceDict(itemName) = priceDict(itemName) + prc
         Else
-            quantity = 0
+            qtyDict.Add itemName, qty
+            priceDict.Add itemName, prc
         End If
-        ' Get UOM from table first
-        If uomColIndex > 0 Then
-            uom = CStr(tbl.DataBodyRange(i, uomColIndex).value)
-        End If
-        ' Get price if available
-        If priceColIndex > 0 Then
-            If IsNumeric(tbl.DataBodyRange(i, priceColIndex).value) Then
-                price = CDbl(tbl.DataBodyRange(i, priceColIndex).value)
-            End If
-        End If
-        ' Skip empty or zero quantity items
-        If Trim(item) <> "" And quantity > 0 Then
-            ' Get ROW and ITEM_CODE from inventory
-            Dim rowNum As String, ItemCode As String
-            rowNum = "": ItemCode = ""
-            ' Get items directly from inventory
-            Dim invWs As Worksheet
-            Dim invTbl As ListObject
-            Dim lookupRow As Long
-            Set invWs = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
-            Set invTbl = invWs.ListObjects("invSys")
-            lookupRow = FindRowByValue(invTbl, "ITEM", item)
-            If lookupRow > 0 Then
-                On Error Resume Next
-                rowNum = CStr(invTbl.DataBodyRange(lookupRow, invTbl.ListColumns("ROW").Index).value)
-                ItemCode = CStr(invTbl.DataBodyRange(lookupRow, invTbl.ListColumns("ITEM_CODE").Index).value)
-                ' Get UOM from inventory if not set yet
-                If Trim(uom) = "" Then
-                    uom = CStr(invTbl.DataBodyRange(lookupRow, invTbl.ListColumns("UOM").Index).value)
-                End If
-                On Error GoTo ErrorHandler
-            End If
-            ' Create a unique key for tallying
-            Dim uniqueKey As String
-            If rowNum <> "" Then
-                uniqueKey = "ROW_" & rowNum
-            ElseIf ItemCode <> "" Then
-                uniqueKey = "CODE_" & ItemCode
-            Else
-                uniqueKey = "NAME_" & LCase(Trim(item))
-            End If
-            ' Tally items
-            If dict.Exists(uniqueKey) Then
-                dict(uniqueKey) = dict(uniqueKey) + quantity
-                priceDict(uniqueKey) = priceDict(uniqueKey) + price  ' Just add prices directly
-            Else
-                dict.Add uniqueKey, quantity
-                priceDict.Add uniqueKey, price  ' Store price without multiplication
-                ' Get UOM from data table if available
-                If dataUOMByItem.Exists(uniqueKey) And Trim(uom) = "" Then
-                    uom = dataUOMByItem(uniqueKey)
-                ElseIf Trim(uom) = "" Then
-                    uom = "each" ' Default only if no other UOM found
-                End If
-                ' Store row information and UOM
-                dict.Add "info_" & uniqueKey, Array(item, ItemCode, rowNum, uom)
-                ' Store UOM for this key
-                uomDict.Add uniqueKey, uom
-            End If
-        End If
-        On Error GoTo ErrorHandler
     Next i
-    ' Configure form list box
-    frm.lstBox.Clear
-    frm.lstBox.ColumnCount = 6 ' ITEM, QTY, UOM, PRICE, ITEM_CODE, ROW
-    frm.lstBox.ColumnWidths = "150;50;50;70;0;0" ' Hide ITEM_CODE and ROW
-    ' Add header row
-    frm.lstBox.AddItem "ITEMS"
-    frm.lstBox.List(0, 1) = "QTY"
-    frm.lstBox.List(0, 2) = "UOM"
-    frm.lstBox.List(0, 3) = "PRICE"
-    ' Add data rows
-    If dict.count > 0 Then
-        For Each key In dict.Keys
-            If Left$(key, 5) <> "info_" Then
-                itemInfo = dict("info_" & key)
-                Dim unitPrice As Double
-                ' Calculate unit price (price per unit)
-                If dict(key) > 0 Then
-                    ' First try to get price from priceDict
-                    If priceDict.Exists(key) Then
-                        unitPrice = priceDict(key) / dict(key)
-                    ' Then from data table lookup
-                    ElseIf dataPriceByItem.Exists(key) Then
-                        unitPrice = dataPriceByItem(key)
-                    Else
-                        unitPrice = 0
-                    End If
-                End If
-                frm.lstBox.AddItem itemInfo(0) ' Item name
-                frm.lstBox.List(frm.lstBox.ListCount - 1, 1) = dict(key)      ' Quantity
-                frm.lstBox.List(frm.lstBox.ListCount - 1, 2) = itemInfo(3)   ' UOM
-                frm.lstBox.List(frm.lstBox.ListCount - 1, 3) = priceDict(key)  ' Display total price
-                frm.lstBox.List(frm.lstBox.ListCount - 1, 4) = itemInfo(1)   ' ITEM_CODE
-                frm.lstBox.List(frm.lstBox.ListCount - 1, 5) = itemInfo(2)   ' ROW
-            End If
-        Next key
-    End If
-    Exit Sub
-ErrorHandler:
-    MsgBox "Error in PopulateReceivedForm: " & Err.Description & " (Line: " & Erl & ")", vbCritical
-    Debug.Print "Error in PopulateReceivedForm: " & Err.Description & " at line " & Erl
-    Resume Next
+
+    ' Configure listbox headers
+    With frm.lstBox
+        .Clear
+        .ColumnCount = 4
+        .ColumnWidths = "150;70;50;70"
+        .AddItem "ITEMS"
+        .List(0, 1) = "QUANTITY"
+        .List(0, 2) = "UOM"
+        .List(0, 3) = "PRICE"
+    End With
+
+    ' Populate aggregated data rows
+    For Each key In qtyDict.Keys
+        ' Get UOM for the item (cast key to String)
+        uom = GetUOMFromInvSys(CStr(key), "", "UOM")
+        If Len(Trim(uom)) = 0 Then uom = defaultUOM
+
+        With frm.lstBox
+            .AddItem CStr(key)
+            .List(.ListCount - 1, 1) = qtyDict(key)
+            .List(.ListCount - 1, 2) = uom
+            .List(.ListCount - 1, 3) = priceDict(key)
+        End With
+    Next key
 End Sub
+
+' Helper: Get column index by header name
+Private Function ColumnIndex(tbl As ListObject, header As String) As Long
+    Dim col As ListColumn
+    For Each col In tbl.ListColumns
+        If StrComp(col.Name, header, vbTextCompare) = 0 Then
+            ColumnIndex = col.Index
+            Exit Function
+        End If
+    Next col
+    ColumnIndex = 0
+End Function
+
+' Helper: Get a field from invSys master by ROW
+Private Function GetInvSysValue(rowNum As String, ItemCode As String, header As String) As String
+    Dim invWs As Worksheet, invTbl As ListObject
+    Dim findCol As Long, tgtCol As Long, cel As Range
+    Set invWs = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Set invTbl = invWs.ListObjects("invSys")
+    findCol = invTbl.ListColumns("ROW").Index
+    tgtCol = invTbl.ListColumns(header).Index
+    For Each cel In invTbl.DataBodyRange.Columns(findCol).Cells
+        If CStr(cel.value) = rowNum Then
+            GetInvSysValue = cel.Offset(0, tgtCol - findCol).value
+            Exit Function
+        End If
+    Next
+    GetInvSysValue = ""
+End Function
+
+' This subroutine tallies shipments from the "ShipmentsTally" table and displays them in a form.
+' It aggregates quantities by item and displays them in a list box.
 Sub TallyReceived()
     On Error GoTo ErrorHandler
     ' Debug info
@@ -1628,6 +2036,12 @@ End Function
 
 
 
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modUR_ExcelIntegration
 ''''''''''''''''''''''''''''''''''''
@@ -1656,6 +2070,12 @@ Private Sub Workbook_Open()
     Application.EnableEvents = True
     EventLock = False
 End Sub
+
+
+
+
+
+
 
 
 
@@ -1779,6 +2199,12 @@ End Function
 
 
 
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modUR_Transaction
 ''''''''''''''''''''''''''''''''''''
@@ -1873,6 +2299,15 @@ End Sub
 
 
 
+
+
+
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: modUR_UndoRedo
 ''''''''''''''''''''''''''''''''''''
@@ -1956,6 +2391,15 @@ End Function
 
 
 
+
+
+
+
+
+
+
+
+
 ''''''''''''''''''''''''''''''''''''
 ' Module: MouseScroll
 ''''''''''''''''''''''''''''''''''''
@@ -2019,7 +2463,9 @@ End Function
 '' Requires:
 ''    - MouseOverControl: Container that tracks MouseMove events
 ''==============================================================================
+
 Option Explicit
+
 #If Mac Then 'Placeholders
     Public Function EnableMouseScroll(ByVal uForm As MSForms.UserForm _
                                     , Optional ByVal passScrollToParentAtMargins As Boolean = True _
@@ -2030,10 +2476,12 @@ Option Explicit
     Public Sub SetHoveredControl(ByVal moCtrl As MouseOverControl): End Sub
     Public Sub ProcessMouseData(): End Sub
 #Else
+
 Private Type POINTAPI
     x As Long
     y As Long
 End Type
+
 'API declarations
 #If VBA7 Then
     Private Declare PtrSafe Function CallNextHookEx Lib "user32" (ByVal hHook As LongPtr, ByVal ncode As Long, ByVal wParam As LongPtr, lParam As Any) As LongPtr
@@ -2080,11 +2528,13 @@ End Type
     Private Declare Function UnhookWindowsHookEx Lib "user32" (ByVal hHook As Long) As Long
     Private Declare Function WindowFromPoint Lib "user32" (ByVal xPoint As Long, ByVal yPoint As Long) As Long
 #End If
+
 #If VBA7 = 0 Then
     Private Enum LongPtr
         [_]
     End Enum
 #End If
+
 #If Win64 Then
     Private Const PTR_SIZE As Long = 8
     Private Type LLTemplate
@@ -2096,8 +2546,10 @@ End Type
     Private Const vbLongLong As Long = 20 'Useful in Select Case logic
     Private Const vbLongPtr As Long = vbLong
 #End If
+
 'Id of the hook procedure to be installed with SetWindowsHookExA for MouseProc
 Private Const WH_MOUSE As Long = 7
+
 'https://msdn.microsoft.com/en-us/library/windows/desktop/ms644988(v=vs.85).aspx
 Private Type MOUSEHOOKSTRUCT
     pt As POINTAPI
@@ -2105,9 +2557,11 @@ Private Type MOUSEHOOKSTRUCT
     wHitTestCode As Long
     dwExtraInfo As LongPtr
 End Type
+
 'nCode
 Private Const HC_ACTION As Long = 0
 Private Const HC_NOREMOVE As Long = 3
+
 'wParam
 Private Const WM_MOUSEMOVE As Long = &H200
 Private Const WM_LBUTTONDOWN As Long = &H201
@@ -2124,36 +2578,47 @@ Private Const WM_XBUTTONDOWN As Long = &H20B
 Private Const WM_XBUTTONUP As Long = &H20C
 Private Const WM_XBUTTONDBLCLK As Long = &H20D
 Private Const WM_MOUSEHWHEEL As Long = &H20E
+
 'lParam
 Private Type MOUSEHOOKSTRUCTEX
     tagMOUSEHOOKSTRUCT As MOUSEHOOKSTRUCT
     mouseData As Long 'DWORD
 End Type
+
 'Necessary struct and constants to calculate the number of lines/pages to scroll
 'https://msdn.microsoft.com/en-us/library/ms997498.aspx
 Private Const WHEEL_DELTA As Long = 120
 Private Const SPI_GETWHEELSCROLLLINES As Long = &H68
+
 Private Type SCROLL_AMOUNT
     lines As Single
     pages As Single
 End Type
+
 'Hook handle obtained from a previous call to SetWindowsHookEx
 'Used when calling UnhookWindowsHookEx in order to remove the hook
 Private m_hHookMouse As LongPtr
+
 'Window handles for all forms with scrolling enabled. Always instantiated
 Private m_hWndAllForms As New Collection
+
 'Collection of sub-collections of MouseOverControls (one for each form)
 Private m_controls As New Collection
+
 'Keeps track of options for each form
 Private m_options As New Collection
+
 'The last control that was hovered (could be the UserForm itself)
 Private m_lastHoveredControl As MouseOverControl
+
 'If VBE took focus then the form needs to retake focus via an async call
 Private m_needsActivation As Boolean
 Private m_needsHooking As Boolean
+
 'The last ComboBox that was used
 Private m_lastCombo As MSForms.ComboBox
 Private m_isLastComboOn As Boolean
+
 'The Scrollable Control Types/Categories
 Private Enum CONTROL_TYPE
     ctNone = 0
@@ -2166,12 +2631,14 @@ Private Enum CONTROL_TYPE
     ctText = 7
     ctOther = 8
 End Enum
+
 'The type of Action possible when Mouse Wheel is turned (see MouseProc func)
 Private Enum SCROLL_ACTION
     saScrollY = 1
     saScrollX = 2
     saZoom = 3
 End Enum
+
 Private Enum SCROLL_OPTIONS
     soNone = 0
     soPassScrollToParentAtMargins = 1 'If the current hovered control cannot
@@ -2181,10 +2648,12 @@ Private Enum SCROLL_OPTIONS
     soUseCtrlToZoom = 4
 End Enum
 Private m_lastSO As SCROLL_OPTIONS
+
 'Storage for arguments received in the last mouse hook call
 Private m_ncode As Long
 Private m_wParam As Long
 Private m_lParam As MOUSEHOOKSTRUCTEX
+
 '*******************************************************************************
 'Enables mouse wheel scroll for the specified UserForm
 '*******************************************************************************
@@ -2201,6 +2670,7 @@ Public Function EnableMouseScroll(ByVal uForm As MSForms.UserForm _
     ResetLast
     EnableMouseScroll = True
 End Function
+
 '*******************************************************************************
 'Disables mouse wheel scroll for a specific UserForm. Can be called, optionally,
 '   from a form's teminate event but is not needed
@@ -2209,6 +2679,7 @@ Public Sub DisableMouseScroll(ByVal uForm As MSForms.UserForm)
     RemoveForm GetFormHandle(uForm)
     ResetLast
 End Sub
+
 '*******************************************************************************
 'Resets cached controls
 '*******************************************************************************
@@ -2216,6 +2687,7 @@ Private Sub ResetLast()
     Set m_lastHoveredControl = Nothing
     Set m_lastCombo = Nothing
 End Sub
+
 '*******************************************************************************
 'Hooks Mouse messages to the MouseProc procedure
 'The MouseProc callback will manipulate controls/forms by calling methods like
@@ -2239,6 +2711,7 @@ Private Function GetCallbackPtr() As LongPtr
         CopyMemory ByVal GetCallbackPtr + asmRetOffset, 0, 1
     #End If
 End Function
+
 '*******************************************************************************
 'UnHooks Mouse
 '*******************************************************************************
@@ -2253,6 +2726,7 @@ Private Sub UnHookMouse()
         Set m_lastCombo = Nothing
     End If
 End Sub
+
 '*******************************************************************************
 'Callback function - asynchronously defers mouse messages to 'ProcessMouseData'
 '
@@ -2272,6 +2746,7 @@ Private Function MouseProc(ByVal ncode As Long _
     m_hHookMouse = 0
     MouseProc = CallNextHookEx(0, ncode, wParam, ByVal lParam)
 End Function
+
 '*******************************************************************************
 'Adds the form handle to m_hWndAllForms collection
 'Adds the passScrollAtMargins option to m_passScrollColl collection
@@ -2316,6 +2791,7 @@ Private Function MouseOverControl() As MouseOverControl
     If moc Is Nothing Then Set moc = New MouseOverControl
     Set MouseOverControl = moc
 End Function
+
 '*******************************************************************************
 'Removes a form (by window handle) from the internal collections
 '*******************************************************************************
@@ -2328,6 +2804,7 @@ Private Sub RemoveForm(ByVal hWndForm As LongPtr)
     End If
     If m_hWndAllForms.count = 0 Then UnHookMouse
 End Sub
+
 '*******************************************************************************
 'Removes any form that has been destroyed
 '*******************************************************************************
@@ -2371,6 +2848,7 @@ Private Sub RemoteAssign(ByRef remoteVT As Variant, _
     targetVariable = newValue
     remoteVT = vbLongPtr 'Stop linking to remote address, for safety
 End Sub
+
 '*******************************************************************************
 'Returns a boolean indicating if a Collection has a specific key
 'Parameters:
@@ -2385,6 +2863,7 @@ Private Function CollectionHasKey(ByVal coll As Collection _
     CollectionHasKey = (Err.Number = 0)
     On Error GoTo 0
 End Function
+
 '*******************************************************************************
 'Called by MouseMove capable controls (MouseOverControl) stored in m_controls
 '*******************************************************************************
@@ -2404,6 +2883,7 @@ Public Sub SetHoveredControl(ByVal moCtrl As MouseOverControl)
         m_needsHooking = False
     End If
 End Sub
+
 '*******************************************************************************
 'Keeps track of last combo box to avoid scrolling other controls while the combo
 '   is expanded
@@ -2416,6 +2896,7 @@ Private Sub UpdateLastCombo()
         m_isLastComboOn = (m_lastCombo.TopIndex >= 0)
     End If
 End Sub
+
 '*******************************************************************************
 'Callback hook function - monitors mouse messages
 '*******************************************************************************
@@ -2525,6 +3006,7 @@ Exit Sub
 DelayHookAsync:
     m_needsHooking = True
 End Sub
+
 '*******************************************************************************
 'Returns the String Caption of a Window identified by a handle
 '*******************************************************************************
@@ -2533,6 +3015,7 @@ Private Function GetWindowCaption(ByVal hwnd As LongPtr) As String
     GetWindowCaption = VBA.Space$(bufferLength)
     GetWindowText hwnd, GetWindowCaption, bufferLength + 1
 End Function
+
 '*******************************************************************************
 'Get the type of scroll action by reading Shift and Control key states
 '*******************************************************************************
@@ -2555,6 +3038,7 @@ Private Function GetScrollAction(ByVal yWheel As Boolean) As SCROLL_ACTION
         End If
     End If
 End Function
+
 '*******************************************************************************
 'Get the wheel delta from mouseData Double Word's HiWord
 'The LoWord is undefined and reserved
@@ -2562,12 +3046,14 @@ End Function
 Private Function GetWheelDelta(ByVal dwMouseData As Long) As Integer
     GetWheelDelta = HiWord(dwMouseData)
 End Function
+
 '*******************************************************************************
 'Function to retrieve the High Word (16-bit) from a Double Word (32-bit)
 '*******************************************************************************
 Private Function HiWord(ByVal dWord As Long) As Integer
     HiWord = VBA.Int(dWord / &H10000)
 End Function
+
 '*******************************************************************************
 'Get the scroll amount (lines or pages) for a mouse wheel scroll value
 '*******************************************************************************
@@ -2583,6 +3069,7 @@ Private Function GetScrollAmount(ByVal scrollValue As Integer) As SCROLL_AMOUNT
     '
     GetScrollAmount = scrollAmount
 End Function
+
 '*******************************************************************************
 'Get the number of scroll lines (or page = -1) that are set in the system
 '*******************************************************************************
@@ -2592,6 +3079,7 @@ Private Function GetUserScrollLines() As Long
     SystemParametersInfo SPI_GETWHEELSCROLLLINES, 0, result, 0
     GetUserScrollLines = result
 End Function
+
 '*******************************************************************************
 'Vertically scroll a control or the hooked Form itself
 '*******************************************************************************
@@ -2606,7 +3094,7 @@ Private Sub ScrollY(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             Call ListScrollY(ctrl, scrollAmount, ctrlType)
         Case ctFrame, ctPage, ctMulti, ctForm
             If ctrlType = ctMulti Then
-                Set ctrl = ctrl.selectedItem
+                Set ctrl = ctrl.SelectedItem
                 ctrlType = ctPage
             End If
             '
@@ -2658,6 +3146,7 @@ Private Sub ScrollY(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             If parentCtrlType <> ctNone Then ScrollY ctrl.Parent, scrollAmount
     End Select
 End Sub
+
 '*******************************************************************************
 'Vertically scroll a ComboBox or a ListBox control
 '*******************************************************************************
@@ -2704,6 +3193,7 @@ Private Sub ListScrollY(ByVal ctrl As Object _
         End If
     End If
 End Sub
+
 '*******************************************************************************
 'Vertically scroll a TextBox control
 '*******************************************************************************
@@ -2827,6 +3317,7 @@ Private Function GetParent(ByVal tbox As MSForms.TextBox) As Object
     On Error GoTo 0
     Set GetParent = p
 End Function
+
 '*******************************************************************************
 'Horizontally scroll a control or the hooked Form itself
 'Code is very similar to the ScrollY method with main difference being that
@@ -2843,7 +3334,7 @@ Private Sub ScrollX(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             Call ListScrollX(ctrl, scrollAmount)
         Case ctFrame, ctPage, ctMulti, ctForm
             If ctrlType = ctMulti Then
-                Set ctrl = ctrl.selectedItem
+                Set ctrl = ctrl.SelectedItem
                 ctrlType = ctPage
             End If
             '
@@ -2893,6 +3384,7 @@ Private Sub ScrollX(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             If parentCtrlType <> ctNone Then ScrollX ctrl.Parent, scrollAmount
     End Select
 End Sub
+
 '*******************************************************************************
 'Horizontally scroll a ListBox control
 '*******************************************************************************
@@ -2918,6 +3410,7 @@ Private Sub ListScrollX(ByVal lbox As MSForms.Control _
         Next i
     End If
 End Sub
+
 '*******************************************************************************
 'Zooms controls using mouse scroll
 '*******************************************************************************
@@ -2931,7 +3424,7 @@ Private Sub Zoom(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             Exit Sub
         Case ctFrame, ctPage, ctMulti, ctForm
             If ctrlType = ctMulti Then
-                Set ctrl = ctrl.selectedItem
+                Set ctrl = ctrl.SelectedItem
                 ctrlType = ctPage
             End If
             '
@@ -2970,6 +3463,7 @@ Private Sub Zoom(ByVal ctrl As Object, ByRef scrollAmount As SCROLL_AMOUNT)
             If parentCtrlType <> ctNone Then Zoom ctrl.Parent, scrollAmount
     End Select
 End Sub
+
 '*******************************************************************************
 'Get enum of Control Type
 '*******************************************************************************
@@ -2999,6 +3493,7 @@ Private Function GetControlType(ByVal objControl As Object) As CONTROL_TYPE
             End If
     End Select
 End Function
+
 '*******************************************************************************
 'Returns the Window Handle for a UserForm
 'https://docs.microsoft.com/en-us/windows/desktop/api/shlwapi/nf-shlwapi-iunknown_getwindow
@@ -3006,6 +3501,7 @@ End Function
 Private Function GetFormHandle(ByVal objForm As MSForms.UserForm) As LongPtr
     IUnknown_GetWindow objForm, VarPtr(GetFormHandle)
 End Function
+
 '*******************************************************************************
 'Get Shift/Control Key State
 'https://docs.microsoft.com/en-us/windows/desktop/api/winuser/nf-winuser-getkeystate
@@ -3021,6 +3517,7 @@ Private Function IsControlKeyDown() As Boolean
     '
     IsControlKeyDown = CBool(GetKeyState(VK_CONTROL) And &H8000)
 End Function
+
 '*******************************************************************************
 'Returns the handle for the window currently under cursor
 '*******************************************************************************
@@ -3035,316 +3532,7 @@ Private Function GetWindowUnderCursor() As LongPtr
         GetWindowUnderCursor = WindowFromPoint(pt.x, pt.y)
     #End If
 End Function
+
 #End If 'End of #If Mac
-
-
-
-
-''''''''''''''''''''''''''''''''''''
-' Module: modDynamicForms
-''''''''''''''''''''''''''''''''''''
-
-
-
-''''''''''''''''''''''''''''''''''''
-' Module: modExportImportAll
-''''''''''''''''''''''''''''''''''''
-Option Explicit
-' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
-Sub ExportAllModules()
-    Dim vbComp As VBIDE.VBComponent
-    Dim exportPath As String
-    Dim fso As Object
-    Dim fileItem As Object
-
-    ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys"
-    ' Ensure trailing backslash
-    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
-
-    ' Make sure Excel is set to allow programmatic access to VBProject
-    ' (Trust Center > Macro Settings > Trust access to the VBA project object model)
-
-    For Each vbComp In ThisWorkbook.VBProject.VBComponents
-        Select Case vbComp.Type
-            Case vbext_ct_StdModule ' Standard Modules
-                On Error Resume Next
-                vbComp.Export exportPath & "Modules\" & vbComp.Name & ".bas"
-                On Error GoTo 0
-
-            Case vbext_ct_ClassModule ' Class Modules
-                On Error Resume Next
-                vbComp.Export exportPath & "Class Modules\" & vbComp.Name & ".cls"
-                On Error GoTo 0
-
-            Case vbext_ct_MSForm ' UserForms
-                On Error Resume Next
-                vbComp.Export exportPath & "Forms\" & vbComp.Name & ".frm"
-                On Error GoTo 0
-
-            Case vbext_ct_Document ' Sheets and ThisWorkbook
-                On Error Resume Next
-                vbComp.Export exportPath & "Sheets\" & vbComp.Name & ".cls"
-                On Error GoTo 0
-        End Select
-    Next vbComp
-
-    ' Remove FRX files from the Forms folder, if present
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If fso.FolderExists(exportPath & "Forms") Then
-        For Each fileItem In fso.GetFolder(exportPath & "Forms").Files
-            If LCase(fso.GetExtensionName(fileItem.Name)) = "frx" Then
-                fileItem.Delete True
-            End If
-        Next fileItem
-    End If
-
-    MsgBox "Export complete!"
-End Sub
-' Replace code in all modules, classes, forms, and sheets from files (no delete/replace)
-Sub ReplaceAllCodeFromFiles()
-    Dim fso As Object
-    Dim folder As Object
-    Dim file As Object
-    Dim importPath As String
-    Dim vbComp As Object
-    Dim compName As String
-    Dim ext As String
-    Dim codeText As String
-    Dim ts As Object
-    Dim codeLines() As String
-    Dim filteredCode As String
-    Dim i As Long
-    Dim lineTrim As String
-    importPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\" ' <-- update as needed
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FolderExists(importPath) Then
-        MsgBox "Folder not found: " & importPath, vbExclamation
-        Exit Sub
-    End If
-    Set folder = fso.GetFolder(importPath)
-    For Each file In folder.Files
-        ext = LCase(fso.GetExtensionName(file.Name))
-        If ext = "bas" Or ext = "cls" Or ext = "frm" Then
-            compName = fso.GetBaseName(file.Name)
-            ' Find the component by name
-            On Error Resume Next
-            Set vbComp = ThisWorkbook.VBProject.VBComponents(compName)
-            On Error GoTo 0
-            If Not vbComp Is Nothing Then
-                ' Read file text
-                Set ts = fso.OpenTextFile(file.Path, 1)
-                codeText = ts.ReadAll
-                ts.Close
-                codeLines = Split(codeText, vbCrLf)
-                filteredCode = ""
-                For i = LBound(codeLines) To UBound(codeLines)
-                    lineTrim = codeLines(i)
-                    ' Filter out meta lines: Attribute lines that look like meta, not code lines
-                    If LCase(Left(Trim(lineTrim), 9)) = "attribute" Then
-                        ' Only skip if it matches the meta pattern: Attribute <name> = ... or Attribute <name>.<property> = ...
-                        If lineTrim Like "Attribute * =*" Or lineTrim Like "Attribute *.* =*" Then GoTo NextLine
-                    End If
-                    If Trim(lineTrim) = "" Then GoTo NextLine
-                    If UCase(Left(Trim(lineTrim), 5)) = "BEGIN" Then GoTo NextLine
-                    If UCase(Trim(lineTrim)) = "END" Then GoTo NextLine
-                    If Left(UCase(Trim(lineTrim)), 7) = "VERSION" Then GoTo NextLine
-                    If Left(UCase(Trim(lineTrim)), 8) = "MULTIUSE" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 2) = "//" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 1) = "{" And Right(Trim(lineTrim), 1) = "}" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 7) = "Caption" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 12) = "ClientHeight" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 10) = "ClientLeft" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 9) = "ClientTop" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 11) = "ClientWidth" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 13) = "OleObjectBlob" Then GoTo NextLine
-                    If Left(Trim(lineTrim), 15) = "StartUpPosition" Then GoTo NextLine
-                    filteredCode = filteredCode & lineTrim & vbCrLf
-NextLine:
-                Next i
-                ' Replace code
-                With vbComp.CodeModule
-                    .DeleteLines 1, .CountOfLines
-                    .InsertLines 1, filteredCode
-                End With
-            End If
-            Set vbComp = Nothing
-        End If
-    Next file
-    MsgBox "All code replaced from files!"
-End Sub
-Sub ExportTablesHeadersAndControls()
-    Dim ws As Worksheet
-    Dim lo As ListObject
-    Dim lc As ListColumn
-    Dim ole As OLEObject
-    Dim shp As Shape
-    Dim folderPath As String, outputPath As String
-    Dim Fnum As Long, hdrs As String
-    Dim ctrlType As Long, ctrlTypeName As String
-    ' 1) Set your folder (must already exist)
-    folderPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
-    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
-    ' 2) Append filename
-    outputPath = folderPath & "TablesHeadersAndControls.txt"
-    Fnum = FreeFile
-    Open outputPath For Output As #Fnum
-    For Each ws In ThisWorkbook.Worksheets
-        Print #Fnum, "Sheet (Tab):  " & ws.Name
-        Print #Fnum, "Sheet (Code): " & ws.CodeName
-        ' ? Tables & Headers ?
-        For Each lo In ws.ListObjects
-            Print #Fnum, "  Table: " & lo.Name
-            hdrs = ""
-            For Each lc In lo.ListColumns
-                hdrs = hdrs & lc.Name & ", "
-            Next lc
-            If Len(hdrs) > 0 Then hdrs = Left(hdrs, Len(hdrs) - 2)
-            Print #Fnum, "    Headers: " & hdrs
-        Next lo
-        ' ? ActiveX Controls ?
-        For Each ole In ws.OLEObjects
-            Print #Fnum, "  ActiveX Control: " & ole.Name & " (" & ole.progID & ")"
-            On Error Resume Next
-            Print #Fnum, "    LinkedCell: " & ole.LinkedCell
-            Print #Fnum, "    TopLeft: " & ole.TopLeftCell.Address(False, False)
-            Print #Fnum, "    Caption: " & ole.Object.Caption
-            Print #Fnum, "    Value: " & ole.Object.value
-            On Error GoTo 0
-        Next ole
-        ' ? Forms Controls ?
-        For Each shp In ws.Shapes
-            If shp.Type = msoFormControl Then
-                ctrlType = shp.FormControlType
-                Select Case ctrlType
-                    Case 0: ctrlTypeName = "Button"
-                    Case 1: ctrlTypeName = "Checkbox"
-                    Case 2: ctrlTypeName = "DropDown"
-                    Case 3: ctrlTypeName = "EditBox"
-                    Case 4: ctrlTypeName = "ListBox"
-                    Case 5: ctrlTypeName = "ScrollBar"
-                    Case 6: ctrlTypeName = "Spinner"
-                    Case Else: ctrlTypeName = "Unknown"
-                End Select
-                Print #Fnum, "  Form Control: " & shp.Name
-                Print #Fnum, "    Type: " & ctrlTypeName & " (" & ctrlType & ")"
-                On Error Resume Next
-                Print #Fnum, "    LinkedCell: " & shp.ControlFormat.LinkedCell
-                If shp.HasTextFrame Then
-                    Print #Fnum, "    Text: " & Replace(shp.TextFrame.Characters.text, vbCr, " ")
-                End If
-                On Error GoTo 0
-            End If
-        Next shp
-        Print #Fnum, String(60, "-")
-    Next ws
-    Close #Fnum
-    MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
-End Sub
-Sub ExportUserFormControls()
-    Dim vbProj As VBIDE.VBProject
-    Dim vbComp As VBIDE.VBComponent
-    Dim ctrl   As MSForms.Control
-    Dim outputPath As String, Fnum As Long
-    '? adjust folder as needed (must exist) ?
-    outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
-    Fnum = FreeFile
-    Open outputPath For Output As #Fnum
-    Set vbProj = ThisWorkbook.VBProject
-    For Each vbComp In vbProj.VBComponents
-        ' only UserForm components
-        If vbComp.Type = vbext_ct_MSForm Then
-            Print #Fnum, "UserForm: " & vbComp.Name
-            ' iterate its controls
-            For Each ctrl In vbComp.Designer.Controls
-                Print #Fnum, "  Control: " & ctrl.Name & " (" & TypeName(ctrl) & ")"
-                On Error Resume Next
-                ' many controls have a Caption
-                Print #Fnum, "    Caption: " & ctrl.Caption
-                ' and many have a Value
-                Print #Fnum, "    Value: " & ctrl.value
-                On Error GoTo 0
-            Next ctrl
-            Print #Fnum, String(50, "-")
-        End If
-    Next vbComp
-    Close #Fnum
-    MsgBox "UserForm controls exported to:" & vbCrLf & outputPath, vbInformation
-End Sub
-
-' Requires reference to “Microsoft Visual Basic for Applications Extensibility 5.3”
-' and Trust Center > Macro Settings > “Trust access to the VBA project object model” enabled.
-
-Public Sub ExportAllCodeToSingleFiles()
-    Dim exportPath As String
-    Dim wsFileNum   As Long, frmFileNum As Long
-    Dim clsFileNum  As Long, modFileNum As Long
-    Dim vbComp      As VBIDE.VBComponent
-    Dim codeMod     As VBIDE.CodeModule
-    
-    ' ? Modify this to your desired folder (must already exist)
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys"
-    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
-    
-    ' Open our four output files
-    wsFileNum = FreeFile: Open exportPath & "SheetsCode.txt" For Output As #wsFileNum
-    frmFileNum = FreeFile: Open exportPath & "FormsCode.txt" For Output As #frmFileNum
-    clsFileNum = FreeFile: Open exportPath & "ClassModulesCode.txt" For Output As #clsFileNum
-    modFileNum = FreeFile: Open exportPath & "StandardModulesCode.txt" For Output As #modFileNum
-    
-    ' Loop through every component in this workbook
-    For Each vbComp In ThisWorkbook.VBProject.VBComponents
-        Set codeMod = vbComp.CodeModule
-        Select Case vbComp.Type
-            Case vbext_ct_Document           ' Sheets & ThisWorkbook
-                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
-                Print #wsFileNum, "' Component: " & vbComp.Name
-                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
-                If codeMod.CountOfLines > 0 Then
-                    Print #wsFileNum, codeMod.lines(1, codeMod.CountOfLines)
-                End If
-                Print #wsFileNum, vbCrLf
-            
-            Case vbext_ct_MSForm             ' UserForms
-                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
-                Print #frmFileNum, "' UserForm: " & vbComp.Name
-                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
-                If codeMod.CountOfLines > 0 Then
-                    Print #frmFileNum, codeMod.lines(1, codeMod.CountOfLines)
-                End If
-                Print #frmFileNum, vbCrLf
-            
-            Case vbext_ct_ClassModule        ' Class modules
-                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
-                Print #clsFileNum, "' Class Module: " & vbComp.Name
-                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
-                If codeMod.CountOfLines > 0 Then
-                    Print #clsFileNum, codeMod.lines(1, codeMod.CountOfLines)
-                End If
-                Print #clsFileNum, vbCrLf
-            
-            Case vbext_ct_StdModule          ' Standard (.bas) modules
-                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
-                Print #modFileNum, "' Module: " & vbComp.Name
-                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
-                If codeMod.CountOfLines > 0 Then
-                    Print #modFileNum, codeMod.lines(1, codeMod.CountOfLines)
-                End If
-                Print #modFileNum, vbCrLf
-        End Select
-    Next vbComp
-    
-    ' Close all files
-    Close #wsFileNum
-    Close #frmFileNum
-    Close #clsFileNum
-    Close #modFileNum
-    
-    MsgBox "All code exported to:" & vbCrLf & _
-           exportPath & vbCrLf & _
-           "(SheetsCode.txt, FormsCode.txt, ClassModulesCode.txt, StandardModulesCode.txt)", _
-           vbInformation
-End Sub
-
 
 
