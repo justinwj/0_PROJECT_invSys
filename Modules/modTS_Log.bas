@@ -70,7 +70,7 @@ Sub LogReceivedDetailed(receivedSummary As Object)
         ' Fill in all fields - Make sure array indexes match your data structure
         On Error Resume Next
         ' Array: refNum, item, quantity, price, uom, vendor, location, itemCode, rowNum, date
-        If colRefNum > 0 Then newRow.Range(1, colRefNum).value = itemData(0)    ' ref_NUMBER
+        If colRefNum > 0 Then newRow.Range(1, colRefNum).value = itemData(0)    ' REF_NUMBER
         If colItems > 0 Then newRow.Range(1, colItems).value = itemData(1)      ' ITEMS
         If colQty > 0 Then newRow.Range(1, colQty).value = itemData(2)          ' QUANTITY
         If colPrice > 0 Then newRow.Range(1, colPrice).value = itemData(3)      ' PRICE

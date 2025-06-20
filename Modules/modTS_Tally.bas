@@ -262,7 +262,7 @@ Private Function GetInvSysValue(rowNum As String, itemCode As String, header As 
     GetInvSysValue = ""
 End Function
 
-' This subroutine tallies shipments from the "ShipmentsTally" table and displays them in a form.
+
 ' It aggregates quantities by item and displays them in a list box.
 Sub TallyReceived()
     On Error GoTo ErrorHandler

@@ -13,18 +13,15 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
+
+Option Explicit
 ' Handle btnSend click event
 Private Sub btnSend_Click()
-    On Error GoTo ErrorHandler
-    ' Process the data first
-    SendOrderData
-    ' Then unload the form
+    Call modTS_Received.ProcessReceivedBatch
     Unload Me
-    Exit Sub
-ErrorHandler:
-    Debug.Print "Error in btnSend_Click: " & Err.Description
-    MsgBox "Error: " & Err.Description, vbCritical
 End Sub
+
+
 Private Sub UserForm_Initialize()
    ' The lstBox should already be populated by TallyOrders()
    ' Center the form on screen
@@ -32,136 +29,150 @@ Private Sub UserForm_Initialize()
    Me.Left = Application.Left + (Application.Width - Me.Width) / 2
    Me.Top = Application.Top + (Application.Height - Me.Height) / 2
 End Sub
-Sub SendOrderData()
-    On Error GoTo ErrorHandler
-    Dim i As Long
-    Dim receivedSummary As Object
-    Set receivedSummary = CreateObject("Scripting.Dictionary")
-    ' Create unique reference number for this batch
-    Dim batchRefNumber As String
-    batchRefNumber = modTS_Log.GenerateOrderNumber()
-    ' Skip header row (row 0)
-    For i = 1 To Me.lstBox.ListCount - 1
-        Dim item As String, quantity As Double, uom As String
-        Dim ItemCode As String, rowNum As String
-        item = Me.lstBox.List(i, 0)             ' Item name
-        quantity = CDbl(Me.lstBox.List(i, 1))   ' Quantity
-        uom = Me.lstBox.List(i, 2)              ' UOM
-        ItemCode = Me.lstBox.List(i, 3)         ' ItemCode (hidden column)
-        rowNum = Me.lstBox.List(i, 4)           ' ROW (hidden column)
-        ' Create a unique key with ROW or ITEM_CODE
-        Dim uniqueKey As String
-        If rowNum <> "" Then
-            uniqueKey = "ROW_" & rowNum
-        ElseIf ItemCode <> "" Then
-            uniqueKey = "CODE_" & ItemCode
-        Else
-            uniqueKey = "NAME_" & item & "|" & uom
-        End If
-        ' Get additional data from invSysData_Receiving
-        Dim price As Double, vendor As String, location As String
-        GetItemDetailsFromDataTable item, ItemCode, rowNum, price, vendor, location
-        ' Store complete information in dictionary
-        receivedSummary(uniqueKey) = Array(batchRefNumber, item, quantity, price, uom, vendor, location, ItemCode, rowNum, Now())
+
+'────────────────────────────────────────────────────────────
+' Main entry point: does all three phases: Log, update invSys RECEIVED, clear ReceivedTally and invSysData_Received
+'────────────────────────────────────────────────────────────
+' This will show you in the Immediate window for every row:
+'    Which row you picked up
+'    The values you’re about to log
+'    Whether you actually called your logging routine
+Public Sub ProcessReceivedBatch()
+    Dim batchRef As String: batchRef = modTS_Log.GenerateOrderNumber()
+    Dim lst As MSForms.ListBox: Set lst = frmReceivedTally.lstBox
+    Dim i As Long, itemsLogged As Long: itemsLogged = 0
+
+    Debug.Print "=== Starting ProcessReceivedBatch: batchRef=" & batchRef & " ==="
+
+    For i = 0 To lst.ListCount - 1
+        Dim itemName As String: itemName = CStr(lst.List(i, 0) & "")
+        If itemName = "" Or itemName = "ITEMS" Then GoTo NextRow
+
+        Dim qty    As Double: qty    = Val(lst.List(i, 1))
+        Dim price  As Double: price  = Val(lst.List(i, 2))
+        Dim code   As String: code   = CStr(lst.List(i, 3) & "")
+        Dim rowNum As Long:   rowNum = Val(lst.List(i, 4))
+
+        Debug.Print "Row " & i & ": item=" & itemName & "; qty=" & qty & "; price=" & price & "; code=" & code & "; row=" & rowNum
+
+        Dim uom As String, vendor As String, location As String, entryD As Date
+        GetReceivingDetails code, rowNum, uom, vendor, location, entryD
+        Debug.Print " → Looked up UOM=" & uom & ", vendor=" & vendor & ", location=" & location & ", entryDate=" & entryD
+
+        ' Log it
+        Debug.Print " → Appending to ReceivedLog..."
+        AppendReceivedLogRecord batchRef, itemName, qty, price, uom, vendor, location, code, rowNum, entryD
+        itemsLogged = itemsLogged + 1
+
+        ' Update INV SYS
+        UpdateReceivedQuantity rowNum, qty
+
+NextRow:
     Next i
-    ' Log the received items to ReceivedLog
-    modTS_Log.LogReceivedDetailed receivedSummary
-    ' Update quantities in inventory system
-    UpdateInventory receivedSummary, "RECEIVED"
-    ' Notify user
-    MsgBox "Received items have been logged and inventory updated.", vbInformation
-    ' Close form after processing
-    Unload Me
-    Exit Sub
-ErrorHandler:
-    MsgBox "Error " & Err.Number & ": " & Err.Description, vbCritical
+
+    Debug.Print "Processed " & itemsLogged & " items; now clearing staging."
+    ClearReceivedStaging
+    Debug.Print "=== Done ProcessReceivedBatch ==="
 End Sub
-' New function to get additional details from invSysData_Receiving
-Private Sub GetItemDetailsFromDataTable(itemName As String, ItemCode As String, rowNum As String, _
-                                      ByRef price As Double, ByRef vendor As String, ByRef location As String)
-    On Error Resume Next
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets("ReceivedTally")
-    Dim dataTbl As ListObject
-    Set dataTbl = ws.ListObjects("invSysData_Receiving")
-    If dataTbl Is Nothing Then
-        Debug.Print "Data table invSysData_Receiving not found"
-        Exit Sub
-    End If
-    ' Find matching rows in data table
-    Dim i As Long, matchFound As Boolean
-    matchFound = False
-    ' Check columns exist
-    Dim hasPrice As Boolean, hasVendor As Boolean, hasLocation As Boolean
-    Dim priceCol As Long, vendorCol As Long, locationCol As Long
-    Dim rowCol As Long, itemCodeCol As Long, itemNameCol As Long
-    ' Find column indexes
-    For i = 1 To dataTbl.ListColumns.count
-        Select Case UCase(dataTbl.ListColumns(i).Name)
-            Case "PRICE"
-                hasPrice = True
-                priceCol = i
-            Case "VENDOR"
-                hasVendor = True
-                vendorCol = i
-            Case "LOCATION"
-                hasLocation = True
-                locationCol = i
-            Case "ROW"
-                rowCol = i
-            Case "ITEM_CODE"
-                itemCodeCol = i
-            Case "ITEMS"
-                itemNameCol = i
-        End Select
-    Next i
-    ' Initialize default values
-    price = 0
-    vendor = ""
-    location = ""
-    ' Look for matching rows in data table
-    For i = 1 To dataTbl.ListRows.count
-        Dim rowMatch As Boolean
-        rowMatch = False
-        ' Match by ROW first (most precise)
-        If rowNum <> "" And rowCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, rowCol).value) = rowNum Then
-                rowMatch = True
-            End If
-        ' Then by ITEM_CODE
-        ElseIf ItemCode <> "" And itemCodeCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, itemCodeCol).value) = ItemCode Then
-                rowMatch = True
-            End If
-        ' Finally by item name
-        ElseIf itemNameCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, itemNameCol).value) = itemName Then
-                rowMatch = True
-            End If
-        End If
-        ' If we found a match, get the details
-        If rowMatch Then
-            matchFound = True
-            ' Get PRICE
-            If hasPrice Then
-                On Error Resume Next
-                price = price + CDbl(dataTbl.DataBodyRange(i, priceCol).value)
-                On Error GoTo 0
-            End If
-            ' Get VENDOR (use first one found)
-            If hasVendor And vendor = "" Then
-                vendor = CStr(dataTbl.DataBodyRange(i, vendorCol).value)
-            End If
-            ' Get LOCATION (use first one found)
-            If hasLocation And location = "" Then
-                location = CStr(dataTbl.DataBodyRange(i, locationCol).value)
-            End If
-        End If
-    Next i
-    If Not matchFound Then
-        Debug.Print "No matching rows found in data table for " & itemName
-    End If
+
+
+'────────────────────────────────────────────────────────────
+' Pulls the rest of the staging fields from invSysData_Receiving
+'────────────────────────────────────────────────────────────
+Private Sub GetReceivingDetails( _
+    ByVal itemCode  As String, _
+    ByVal rowNum    As Long, _
+    ByRef uom       As String, _
+    ByRef vendor    As String, _
+    ByRef location  As String, _
+    ByRef entryDate As Date)
+    
+    With ThisWorkbook.Sheets("ReceivedTally").ListObjects("invSysData_Receiving")
+        Dim lr As ListRow
+        For Each lr In .ListRows
+            With lr.Range
+                If .Cells(.ListColumns("ROW").Index).Value = rowNum Then
+                    uom       = CStr(.Cells(.ListColumns("UOM").Index).Value)
+                    vendor    = CStr(.Cells(.ListColumns("VENDOR").Index).Value)
+                    location  = CStr(.Cells(.ListColumns("LOCATION").Index).Value)
+                    entryDate = CDate(.Cells(.ListColumns("ENTRY_DATE").Index).Value)
+                    Exit Sub
+                End If
+            End With
+        Next lr
+    End With
+    
+    ' fallback if not found
+    uom       = ""
+    vendor    = ""
+    location  = ""
+    entryDate = Now
 End Sub
+
+
+'────────────────────────────────────────────────────────────
+' Appends a single row into the ReceivedLog table
+'────────────────────────────────────────────────────────────
+Private Sub AppendReceivedLogRecord( _
+    ByVal refNum    As String, _
+    ByVal itemName  As String, _
+    ByVal qty       As Double, _
+    ByVal price     As Double, _
+    ByVal uom       As String, _
+    ByVal vendor    As String, _
+    ByVal location  As String, _
+    ByVal itemCode  As String, _
+    ByVal rowNum    As Long, _
+    ByVal entryDate As Date)
+    
+    Dim ws  As Worksheet:  Set ws  = ThisWorkbook.Sheets("ReceivedLog")
+    Dim tbl As ListObject: Set tbl = ws.ListObjects("ReceivedLog")
+    Dim newRow As ListRow
+    Set newRow = tbl.ListRows.Add
+    
+    With tbl.ListColumns
+        newRow.Range(1, .Item("REF_NUMBER").Index ).Value = refNum
+        newRow.Range(1, .Item("ITEMS").Index      ).Value = itemName
+        newRow.Range(1, .Item("QUANTITY").Index   ).Value = qty
+        newRow.Range(1, .Item("PRICE").Index      ).Value = price
+        newRow.Range(1, .Item("UOM").Index        ).Value = uom
+        newRow.Range(1, .Item("VENDOR").Index     ).Value = vendor
+        newRow.Range(1, .Item("LOCATION").Index   ).Value = location
+        newRow.Range(1, .Item("ITEM_CODE").Index  ).Value = itemCode
+        newRow.Range(1, .Item("ROW").Index        ).Value = rowNum
+        newRow.Range(1, .Item("ENTRY_DATE").Index ).Value = entryDate
+    End With
+End Sub
+
+
+'────────────────────────────────────────────────────────────
+' Adds qty to the RECEIVED column in invSys by ListObject row index
+'────────────────────────────────────────────────────────────
+Private Sub UpdateReceivedQuantity(ByVal rowNum As Long, ByVal qty As Double)
+    Dim wsInv As Worksheet:   Set wsInv = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Dim tblInv As ListObject: Set tblInv = wsInv.ListObjects("invSys")
+    
+    ' rowNum corresponds 1:1 to the ListRow index
+    With tblInv.ListRows(rowNum).Range
+        .Cells(tblInv.ListColumns("RECEIVED").Index).Value = _
+            Val(.Cells(tblInv.ListColumns("RECEIVED").Index).Value) + qty
+    End With
+End Sub
+
+
+'────────────────────────────────────────────────────────────
+' Clears both ReceivedTally and invSysData_Receiving tables
+'────────────────────────────────────────────────────────────
+Private Sub ClearReceivedStaging()
+    Dim sht As Worksheet: Set sht = ThisWorkbook.Sheets("ReceivedTally")
+    With sht.ListObjects("ReceivedTally")
+        If Not .DataBodyRange Is Nothing Then .DataBodyRange.Delete
+    End With
+    With sht.ListObjects("invSysData_Receiving")
+        If Not .DataBodyRange Is Nothing Then .DataBodyRange.Delete
+    End With
+End Sub
+'────────────────────────────────────────────────────────────
 ' Function to update inventory based on ROW or ITEM_CODE
 Private Sub UpdateInventory(itemsDict As Object, ColumnName As String)
     On Error GoTo ErrorHandler
@@ -254,41 +265,45 @@ Private Sub LogInventoryChange(Action As String, ItemCode As String, itemName As
     On Error Resume Next
     ' You might want to use the modTS_Log module for this
 End Sub
-' Add this function to frmReceivedTally.frm:
-Private Function GetUOMFromDataTable(item As String, ItemCode As String, rowNum As String) As String
+
+ Private Function GetUOMFromDataTable(item As String, ItemCode As String, rowNum As String) As String
     On Error Resume Next
-    Dim ws As Worksheet, dataTbl As ListObject
+    Dim ws As Worksheet
+    Dim dataTbl As ListObject
+    Dim uom As String
+    Dim uomCol As Long, codeCol As Long, rowCol As Long
+    Dim i As Long               ' ← Declare your loop counter
+
     Set ws = ThisWorkbook.Sheets("ReceivedTally")
     Set dataTbl = ws.ListObjects("invSysData_Receiving")
-    Dim uom As String
-    uom = "each" ' Default
+    uom = "each"
+
     ' Find UOM column
-    Dim uomCol As Long, itemCol As Long, codeCol As Long, rowCol As Long
-    For i = 1 To dataTbl.ListColumns.count
+    For i = 1 To dataTbl.ListColumns.Count
         Select Case UCase(dataTbl.ListColumns(i).Name)
-            Case "UOM": uomCol = i
-            Case "ITEMS": itemCol = i
-            Case "ITEM_CODE": codeCol = i
-            Case "ROW": rowCol = i
+            Case "UOM":        uomCol = i
+            Case "ITEM_CODE":  codeCol = i
+            Case "ROW":        rowCol  = i
         End Select
     Next i
+
     ' Search for match
-    For i = 1 To dataTbl.ListRows.count
+    For i = 1 To dataTbl.ListRows.Count
         Dim found As Boolean
         found = False
         If rowNum <> "" And rowCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, rowCol).value) = rowNum Then found = True
+            If CStr(dataTbl.DataBodyRange(i, rowCol).Value) = rowNum Then found = True
         ElseIf ItemCode <> "" And codeCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, codeCol).value) = ItemCode Then found = True
-        ElseIf item <> "" And itemCol > 0 Then
-            If CStr(dataTbl.DataBodyRange(i, itemCol).value) = item Then found = True
+            If CStr(dataTbl.DataBodyRange(i, codeCol).Value) = ItemCode Then found = True
         End If
         If found And uomCol > 0 Then
-            uom = CStr(dataTbl.DataBodyRange(i, uomCol).value)
+            uom = CStr(dataTbl.DataBodyRange(i, uomCol).Value)
             Exit For
         End If
     Next i
+
     GetUOMFromDataTable = uom
 End Function
+
 
 

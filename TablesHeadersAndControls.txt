@@ -44,7 +44,7 @@ Sheet (Code): InventoryManagement
 Sheet (Tab):  ReceivedTally
 Sheet (Code): ReceivedTally
   Table: ReceivedTally
-    Headers: ref_NUMBER, ITEMS, QUANTITY, PRICE
+    Headers: REF_NUMBER, ITEMS, QUANTITY, PRICE
   Table: invSysData_Receiving
     Headers: UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, TALLY_ROW
   Table: ReceivingSavedList
