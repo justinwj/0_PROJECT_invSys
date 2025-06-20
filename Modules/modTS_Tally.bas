@@ -46,6 +46,7 @@ Function FormHasRequiredControls(frm As Object) As Boolean
     FormHasRequiredControls = Not (frm.lstBox Is Nothing)
     On Error GoTo 0
 End Function
+    
 Sub PopulateShipmentsForm(frm As frmShipmentsTally)
     On Error GoTo ErrorHandler
     Dim ws As Worksheet
@@ -312,17 +313,7 @@ ErrorHandler:
     Debug.Print "Error in TallyReceived: " & Err.Description & " (Error " & Err.Number & ")"
 End Sub
 ' This should be in your ribbon callback or worksheet button
-Public Sub LaunchShipmentsTally()
-    Application.ScreenUpdating = False
-    TallyShipments
-    Application.ScreenUpdating = True
-End Sub
-' This should be in your ribbon callback or worksheet button
-Public Sub LaunchReceivedTally()
-    Application.ScreenUpdating = False
-    TallyReceived
-    Application.ScreenUpdating = True
-End Sub
+
 ' Helper function to find a row by column value
 Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
     Dim i As Long

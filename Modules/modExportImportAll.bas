@@ -1,3 +1,21 @@
+'────────────────────────────────────────────────────────────
+' Module: modExportImportAll
+' ----put these in the immediate window to run:----
+' ExportAllCodeToSingleFiles
+' ExportTablesHeadersAndControls
+' SyncSheetsCodeBehind
+' SyncFormsCodeBehind
+' SyncClassModules
+' SyncStandardModules
+
+' ReplaceAllCodeFromFiles
+' ExportAllModules
+
+' ListSheetCodeNames
+' ExportUserFormControls
+' SyncSheetsCodeBehind_Diagnostics
+'────────────────────────────────────────────────────────────
+
 Option Explicit
 ' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
 Sub ExportAllModules()

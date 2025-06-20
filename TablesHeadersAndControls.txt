@@ -122,12 +122,12 @@ Sheet (Code): ProductionLog
 Sheet (Tab):  ReceivedLog
 Sheet (Code): ReceivedLog
   Table: ReceivedLog
-    Headers: ref_NUMBER, ITEMS, QUANTITY, PRICE, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, Rcode
+    Headers: REF_NUMBER, ITEMS, QUANTITY, PRICE, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE
 ------------------------------------------------------------
 Sheet (Tab):  ShipmentsLog
 Sheet (Code): ShipmentsLog
   Table: ShipmentsLog
-    Headers: ORDER_NUMBER, ITEMS, QUANTITY, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, Rcode
+    Headers: ORDER_NUMBER, ITEMS, QUANTITY, UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE
 ------------------------------------------------------------
 Sheet (Tab):  Codes
 Sheet (Code): Codes

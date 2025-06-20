@@ -13,142 +13,201 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
-' Handle btnSend click event
+Attribute VB_Description = "UserForm to select shipments, populate staging tables, and send batch"
+
+Attribute VB_Name = "frmShipmentsTally"
+Option Explicit
+
+'====================================
+' UserForm: frmShipmentsTally
+' Purpose: allow selecting shipments, populate staging tables, and send batch
+'====================================
+
 Private Sub btnSend_Click()
-    SendOrderData
+    ' Process all shipment records and update inventory and log tables
+    Call modTS_Shipments.ProcessShipmentsBatch
     Unload Me
 End Sub
+
 Private Sub UserForm_Initialize()
-    ' Center the form on screen
-    Me.StartUpPosition = 0 'Manual
+    ' Center form on screen
+    Me.StartUpPosition = 0 ' Manual
     Me.Left = Application.Left + (Application.Width - Me.Width) / 2
     Me.Top = Application.Top + (Application.Height - Me.Height) / 2
+
+    ' Configure list box: ITEMS, QUANTITY, UOM, ITEM_CODE(hidden), ROW(hidden)
+    With Me.lstBox
+        .Clear
+        .ColumnCount = 5
+        .ColumnWidths = "150;50;80;0;0"
+        .AddItem "ITEMS"
+        .List(0, 1) = "QUANTITY"
+        .List(0, 2) = "UOM"
+    End With
+
+    ' Populate list box with existing ShipmentsTally entries
+    PopulateShipmentsForm Me
 End Sub
-Sub SendOrderData()
-    On Error GoTo ErrorHandler
-    Dim i As Long, shipmentsSummary As Object
-    Set shipmentsSummary = CreateObject("Scripting.Dictionary")
-    ' Skip header row (row 0)
-    For i = 1 To Me.lstBox.ListCount - 1
-        Dim item As String, quantity As Double, uom As String
-        Dim ItemCode As String, rowNum As String
-        item = Me.lstBox.List(i, 0)
-        quantity = CDbl(Me.lstBox.List(i, 1))
-        uom = Me.lstBox.List(i, 2)
-        ' Get the hidden columns with ITEM_CODE and ROW
-        ItemCode = Me.lstBox.List(i, 3)
-        rowNum = Me.lstBox.List(i, 4)
-        ' Create a unique key with ROW or ITEM_CODE
-        Dim uniqueKey As String
-        If rowNum <> "" Then
-            uniqueKey = "ROW_" & rowNum
-        ElseIf ItemCode <> "" Then
-            uniqueKey = "CODE_" & ItemCode
-        Else
-            uniqueKey = "NAME_" & item & "|" & uom
-        End If
-        ' Store in dictionary with all needed information
-        shipmentsSummary(uniqueKey) = Array(item, quantity, uom, ItemCode, rowNum)
-    Next i
-    ' Log the shipment in the ShipmentsLog
-    modTS_Log.LogShipments shipmentsSummary
-    ' Update quantities in inventory system
-    UpdateInventory shipmentsSummary, "SHIPMENTS"
-    ' Close form after processing
-    Unload Me
-    Exit Sub
-ErrorHandler:
-   MsgBox "Error " & Err.Number & ": " & Err.Description, vbCritical
+
+' Handle Enter/Tab to commit selection
+Private Sub lstBox_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+    If KeyCode = vbKeyReturn Or KeyCode = vbKeyTab Then
+        CommitSelectionAndClose
+        KeyCode = 0
+    End If
 End Sub
-' Function to update inventory based on ROW or ITEM_CODE
-Private Sub UpdateInventory(itemsDict As Object, ColumnName As String)
-    On Error GoTo ErrorHandler
-    Dim ws As Worksheet
-    Dim tbl As ListObject
-    Dim key As Variant
-    Dim foundRow As Long
-    Dim currentQty As Double, newQty As Double
-    Set ws = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
-    Set tbl = ws.ListObjects("invSys")
-    ' Get column index for the target column (e.g., "RECEIVED", "SHIPMENTS")
-    Dim targetColIndex As Integer
-    targetColIndex = tbl.ListColumns(ColumnName).Index
-    ws.Unprotect
-    Application.EnableEvents = False
-    For Each key In itemsDict.Keys
-        Dim itemData As Variant
-        itemData = itemsDict(key)
-        ' Extract info from the array
-        Dim item As String, quantity As Double
-        Dim ItemCode As String, rowNum As String
-        item = itemData(0)
-        quantity = itemData(1)
-        ItemCode = itemData(3) ' itemCode at index 3
-        rowNum = itemData(4)   ' rowNum at index 4
-        foundRow = 0
-        ' Try to find by ROW number first (most specific)
-        If rowNum <> "" Then
-            On Error Resume Next
-            foundRow = FindRowByValue(tbl, "ROW", rowNum)
-            On Error GoTo ErrorHandler
-        End If
-        ' If ROW didn't work, try ITEM_CODE
-        If foundRow = 0 And ItemCode <> "" Then
-            On Error Resume Next
-            foundRow = FindRowByValue(tbl, "ITEM_CODE", ItemCode)
-            On Error GoTo ErrorHandler
-        End If
-        ' As last resort, try finding by item name
-        If foundRow = 0 Then
-            On Error Resume Next
-            foundRow = FindRowByValue(tbl, "ITEM", item)
-            On Error GoTo ErrorHandler
-        End If
-        ' If we found the row, update it
-        If foundRow > 0 Then
-            ' Get current quantity
-            currentQty = 0
-            On Error Resume Next
-            currentQty = tbl.DataBodyRange(foundRow, targetColIndex).value
-            If IsEmpty(currentQty) Then currentQty = 0
-            On Error GoTo ErrorHandler
-            ' Update with new quantity
-            newQty = currentQty + quantity
-            tbl.DataBodyRange(foundRow, targetColIndex).value = newQty
-            ' Log this change
-            LogInventoryChange "UPDATE", ItemCode, item, quantity, newQty
-        Else
-            ' Log that we couldn't find the item
-            LogInventoryChange "ERROR", ItemCode, item, quantity, 0
-        End If
-    Next key
-    Application.EnableEvents = True
-    ws.Protect
-    Exit Sub
-ErrorHandler:
-    Application.EnableEvents = True
-    ws.Protect
-    MsgBox "Error updating inventory: " & Err.Description, vbCritical
+
+' Handle double-click to commit
+Private Sub lstBox_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
+    CommitSelectionAndClose
 End Sub
-Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
+
+'************************************************
+' Populate selection into invSysData_Shipping table
+'************************************************
+Private Sub CommitSelectionAndClose()
+    Static isRunning As Boolean
+    If isRunning Then Exit Sub
+    isRunning = True
+
+    Dim chosenValue    As String
+    Dim chosenItemCode As String
+    Dim chosenRowNum   As String
+    Dim chosenVendor   As String
+    Dim location       As String
+    Dim ws             As Worksheet
+    Dim tbl            As ListObject
+    Dim dataTbl        As ListObject
+
+    ' Get selection
+    If Me.lstBox.ListIndex <> -1 Then
+        chosenRowNum   = CStr(Me.lstBox.List(Me.lstBox.ListIndex, 4))
+        chosenItemCode = CStr(Me.lstBox.List(Me.lstBox.ListIndex, 3))
+        chosenValue    = CStr(Me.lstBox.List(Me.lstBox.ListIndex, 0))
+        chosenVendor   = GetVendorByItem(chosenItemCode, chosenValue)
+        location       = GetLocationByItem(chosenItemCode, chosenValue)
+    Else
+        isRunning = False
+        Exit Sub
+    End If
+
+    ' Update sheet and data table
+    Set ws = gSelectedCell.Worksheet
+    Set tbl = ws.ListObjects("ShipmentsTally")
+    Set dataTbl = ws.ListObjects("invSysData_Shipping")
+
+    ' Determine tally row index within the table
+    Dim tallyRowNum As Long
+    tallyRowNum = gSelectedCell.Row - tbl.HeaderRowRange.Row
+
+    ' Remove existing entry for this row in staging
+    DeleteExistingDataForCell dataTbl, tallyRowNum
+
+    ' Add new staging row
+    Dim dataRow As ListRow
+    Set dataRow = dataTbl.ListRows.Add
+    ' Fill staging fields
+    FillDataTableRow dataRow, _
+                     GetItemUOMByRowNum(chosenRowNum, chosenItemCode, chosenValue), _
+                     chosenVendor, location, chosenItemCode, chosenRowNum
+    SetTallyRowNumber dataRow, tallyRowNum
+
+    isRunning = False
+End Sub
+
+'************************************************
+' Delete any existing staging for a given cell
+'************************************************
+Private Sub DeleteExistingDataForCell(dataTbl As ListObject, tallyRowNum As Long)
     Dim i As Long
-    Dim colIndex As Integer
-    FindRowByValue = 0 ' Default return value if not found
+    For i = dataTbl.ListRows.Count To 1 Step -1
+        If dataTbl.DataBodyRange(i, dataTbl.ListColumns("TALLY_ROW").Index).Value = tallyRowNum Then
+            dataTbl.ListRows(i).Delete
+        End If
+    Next i
+End Sub
+
+'*****************************************
+' Fill new staging row with item details
+'*****************************************
+Private Sub FillDataTableRow(dataRow As ListRow, uom As String, vendor As String, location As String, _
+                              ItemCode As String, rowNum As String)
+    Dim tbl As ListObject
+    Set tbl = dataRow.Parent
+    Dim i As Long
+
+    For i = 1 To tbl.ListColumns.Count
+        Select Case UCase(tbl.ListColumns(i).Name)
+            Case "UOM"
+                dataRow.Range(1, i).Value = uom
+            Case "VENDOR"
+                dataRow.Range(1, i).Value = vendor
+            Case "LOCATION"
+                dataRow.Range(1, i).Value = location
+            Case "ITEM_CODE"
+                dataRow.Range(1, i).Value = ItemCode
+            Case "ROW"
+                dataRow.Range(1, i).Value = rowNum
+            Case "ENTRY_DATE"
+                dataRow.Range(1, i).Value = Now()
+        End Select
+    Next i
+End Sub
+
+'*****************************************
+' Record the table row index for later use
+'*****************************************
+Private Sub SetTallyRowNumber(dataRow As ListRow, tallyRowNum As Long)
+    dataRow.Range(1, dataRow.Parent.ListColumns("TALLY_ROW").Index).Value = tallyRowNum
+End Sub
+
+'*****************************************
+' Helper: find vendor by ITEM_CODE or ITEMS
+'*****************************************
+Private Function GetVendorByItem(ItemCode As String, itemName As String) As String
+    On Error Resume Next
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Dim tbl As ListObject: Set tbl = ws.ListObjects("invSys")
+    Dim colIdx As Long: colIdx = tbl.ListColumns("VENDOR").Index
+    Dim foundRow As Long
+    If ItemCode <> "" Then foundRow = FindRowByValue(tbl, "ITEM_CODE", ItemCode)
+    If foundRow = 0 And itemName <> "" Then foundRow = FindRowByValue(tbl, "ITEM", itemName)
+    If foundRow > 0 Then GetVendorByItem = CStr(tbl.DataBodyRange(foundRow, colIdx).Value)
+End Function
+
+'*****************************************
+' Helper: find location by ITEM_CODE or ITEMS
+'*****************************************
+Private Function GetLocationByItem(ItemCode As String, itemName As String) As String
+    On Error Resume Next
+    Dim ws As Worksheet: Set ws = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Dim tbl As ListObject: Set tbl = ws.ListObjects("invSys")
+    Dim colIdx As Long: colIdx = tbl.ListColumns("LOCATION").Index
+    Dim foundRow As Long
+    If ItemCode <> "" Then foundRow = FindRowByValue(tbl, "ITEM_CODE", ItemCode)
+    If foundRow = 0 And itemName <> "" Then foundRow = FindRowByValue(tbl, "ITEM", itemName)
+    If foundRow > 0 Then GetLocationByItem = CStr(tbl.DataBodyRange(foundRow, colIdx).Value)
+End Function
+
+'*****************************************
+' Helper: get UOM via existing global routine
+'*****************************************
+Private Function GetItemUOMByRowNum(rowNum As String, ItemCode As String, itemName As String) As String
+    GetItemUOMByRowNum = modGlobals.GetItemUOMByRowNum(rowNum, ItemCode, itemName)
+End Function
+
+'*****************************************
+' Helper: find a row by matching a column value
+'*****************************************
+Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
+    Dim i As Long, colIndex As Long
     On Error Resume Next
     colIndex = tbl.ListColumns(colName).Index
-    On Error GoTo 0
     If colIndex = 0 Then Exit Function
-    For i = 1 To tbl.ListRows.count
-        If tbl.DataBodyRange(i, colIndex).value = value Then
-            FindRowByValue = i
-            Exit Function
+    For i = 1 To tbl.ListRows.Count
+        If CStr(tbl.DataBodyRange(i, colIndex).Value) = CStr(value) Then
+            FindRowByValue = i: Exit Function
         End If
     Next i
 End Function
-' Helper function to log inventory changes
-Private Sub LogInventoryChange(Action As String, ItemCode As String, itemName As String, qtyChange As Double, newQty As Double)
-    ' This would call your inventory logging system
-    On Error Resume Next
-    ' You might want to use the modTS_Log module for this
-End Sub
 
