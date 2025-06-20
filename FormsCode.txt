@@ -875,22 +875,7 @@ ErrorHandler:
     ws.Protect
     MsgBox "Error updating inventory: " & Err.Description, vbCritical
 End Sub
-' Helper function to find a row by column value
-Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
-    Dim i As Long
-    Dim colIndex As Integer
-    FindRowByValue = 0 ' Default return value if not found
-    On Error Resume Next
-    colIndex = tbl.ListColumns(colName).Index
-    On Error GoTo 0
-    If colIndex = 0 Then Exit Function
-    For i = 1 To tbl.ListRows.count
-        If tbl.DataBodyRange(i, colIndex).value = value Then
-            FindRowByValue = i
-            Exit Function
-        End If
-    Next i
-End Function
+
 ' Helper function to log inventory changes
 Private Sub LogInventoryChange(Action As String, ItemCode As String, itemName As String, qtyChange As Double, newQty As Double)
     ' This would call your inventory logging system
@@ -946,54 +931,30 @@ End Function
 ''''''''''''''''''''''''''''''''''''
 ' UserForm: frmShipmentsTally
 ''''''''''''''''''''''''''''''''''''
+Option Explicit
+
+'====================================
+' UserForm: frmShipmentsTally
+' Purpose: allow selecting shipments, populate staging tables, and send batch
+'====================================
+
 Private Sub btnSend_Click()
-    SendOrderData
+    ' Process all shipment records and update inventory and log tables
+    Call modTS_Shipments.ProcessShipmentsBatch
     Unload Me
 End Sub
+
 Private Sub UserForm_Initialize()
-    ' Center the form on screen
-    Me.StartUpPosition = 0 'Manual
+    ' Center on screen (same as Received)
+    Me.StartUpPosition = 0    ' Manual
     Me.Left = Application.Left + (Application.Width - Me.Width) / 2
     Me.Top = Application.Top + (Application.Height - Me.Height) / 2
+
+    ' Hand off all setup & data-population to your shared routine
+    PopulateShipmentsForm Me
 End Sub
-Sub SendOrderData()
-    On Error GoTo ErrorHandler
-    Dim i As Long, shipmentsSummary As Object
-    Set shipmentsSummary = CreateObject("Scripting.Dictionary")
-    ' Skip header row (row 0)
-    For i = 1 To Me.lstBox.ListCount - 1
-        Dim item As String, quantity As Double, uom As String
-        Dim ItemCode As String, rowNum As String
-        item = Me.lstBox.List(i, 0)
-        quantity = CDbl(Me.lstBox.List(i, 1))
-        uom = Me.lstBox.List(i, 2)
-        ' Get the hidden columns with ITEM_CODE and ROW
-        ItemCode = Me.lstBox.List(i, 3)
-        rowNum = Me.lstBox.List(i, 4)
-        ' Create a unique key with ROW or ITEM_CODE
-        Dim uniqueKey As String
-        If rowNum <> "" Then
-            uniqueKey = "ROW_" & rowNum
-        ElseIf ItemCode <> "" Then
-            uniqueKey = "CODE_" & ItemCode
-        Else
-            uniqueKey = "NAME_" & item & "|" & uom
-        End If
-        ' Store in dictionary with all needed information
-        shipmentsSummary(uniqueKey) = Array(item, quantity, uom, ItemCode, rowNum)
-    Next i
-    ' Log the shipment in the ShipmentsLog
-    ' modTS_Log.LogShipments shipmentsSummary
-    ' Update quantities in inventory system
-    UpdateInventory shipmentsSummary, "SHIPMENTS"
-    ' Close form after processing
-    Unload Me
-    Exit Sub
-ErrorHandler:
-   MsgBox "Error " & Err.Number & ": " & Err.Description, vbCritical
-End Sub
-' Function to update inventory based on ROW or ITEM_CODE
-Private Sub UpdateInventory(itemsDict As Object, ColumnName As String)
+
+    Private Sub UpdateInventory(itemsDict As Object, ColumnName As String)
     On Error GoTo ErrorHandler
     Dim ws As Worksheet
     Dim tbl As ListObject
@@ -1062,27 +1023,52 @@ ErrorHandler:
     ws.Protect
     MsgBox "Error updating inventory: " & Err.Description, vbCritical
 End Sub
-Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
-    Dim i As Long
-    Dim colIndex As Integer
-    FindRowByValue = 0 ' Default return value if not found
-    On Error Resume Next
-    colIndex = tbl.ListColumns(colName).Index
-    On Error GoTo 0
-    If colIndex = 0 Then Exit Function
-    For i = 1 To tbl.ListRows.count
-        If tbl.DataBodyRange(i, colIndex).value = value Then
-            FindRowByValue = i
-            Exit Function
-        End If
-    Next i
-End Function
+
 ' Helper function to log inventory changes
 Private Sub LogInventoryChange(Action As String, ItemCode As String, itemName As String, qtyChange As Double, newQty As Double)
     ' This would call your inventory logging system
     On Error Resume Next
     ' You might want to use the modTS_Log module for this
 End Sub
+
+ Private Function GetUOMFromDataTable(item As String, ItemCode As String, rowNum As String) As String
+    On Error Resume Next
+    Dim ws As Worksheet
+    Dim dataTbl As ListObject
+    Dim uom As String
+    Dim uomCol As Long, codeCol As Long, rowCol As Long
+    Dim i As Long               ' ← Declare your loop counter
+
+    Set ws = ThisWorkbook.Sheets("ShipmentsTally")
+    Set dataTbl = ws.ListObjects("invSysData_Shipping")
+    uom = "each"
+
+    ' Find UOM column
+    For i = 1 To dataTbl.ListColumns.count
+        Select Case UCase(dataTbl.ListColumns(i).Name)
+            Case "UOM":        uomCol = i
+            Case "ITEM_CODE":  codeCol = i
+            Case "ROW":        rowCol = i
+        End Select
+    Next i
+
+    ' Search for match
+    For i = 1 To dataTbl.ListRows.count
+        Dim found As Boolean
+        found = False
+        If rowNum <> "" And rowCol > 0 Then
+            If CStr(dataTbl.DataBodyRange(i, rowCol).value) = rowNum Then found = True
+        ElseIf ItemCode <> "" And codeCol > 0 Then
+            If CStr(dataTbl.DataBodyRange(i, codeCol).value) = ItemCode Then found = True
+        End If
+        If found And uomCol > 0 Then
+            uom = CStr(dataTbl.DataBodyRange(i, uomCol).value)
+            Exit For
+        End If
+    Next i
+
+    GetUOMFromDataTable = uom
+End Function
 
 
 

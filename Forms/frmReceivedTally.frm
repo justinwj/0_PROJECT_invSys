@@ -99,22 +99,7 @@ ErrorHandler:
     ws.Protect
     MsgBox "Error updating inventory: " & Err.Description, vbCritical
 End Sub
-' Helper function to find a row by column value
-Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
-    Dim i As Long
-    Dim colIndex As Integer
-    FindRowByValue = 0 ' Default return value if not found
-    On Error Resume Next
-    colIndex = tbl.ListColumns(colName).Index
-    On Error GoTo 0
-    If colIndex = 0 Then Exit Function
-    For i = 1 To tbl.ListRows.count
-        If tbl.DataBodyRange(i, colIndex).value = value Then
-            FindRowByValue = i
-            Exit Function
-        End If
-    Next i
-End Function
+
 ' Helper function to log inventory changes
 Private Sub LogInventoryChange(Action As String, ItemCode As String, itemName As String, qtyChange As Double, newQty As Double)
     ' This would call your inventory logging system

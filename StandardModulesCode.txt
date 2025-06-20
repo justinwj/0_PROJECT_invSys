@@ -1,6 +1,24 @@
 ''''''''''''''''''''''''''''''''''''
 ' Module: modExportImportAll
 ''''''''''''''''''''''''''''''''''''
+'------------------------------------------------------------
+' Module: modExportImportAll
+' ----put these in the immediate window to run:----
+' ExportAllCodeToSingleFiles
+' ExportTablesHeadersAndControls
+' SyncSheetsCodeBehind
+' SyncFormsCodeBehind
+' SyncClassModules
+' SyncStandardModules
+
+' ReplaceAllCodeFromFiles
+' ExportAllModules
+
+' ListSheetCodeNames
+' ExportUserFormControls
+' SyncSheetsCodeBehind_Diagnostics
+'------------------------------------------------------------
+
 Option Explicit
 ' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
 Sub ExportAllModules()
@@ -123,6 +141,7 @@ Public Sub SyncClassModules()
     ' Notify user when class modules are imported
     MsgBox "Class modules imported successfully!", vbInformation
 End Sub
+    
 'updates code to whatever is in ROOT_PATH & Forms
 Public Sub SyncFormsCodeBehind()
     Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
@@ -472,6 +491,7 @@ End Sub
 ''''''''''''''''''''''''''''''''''''
 ' Module: modAdmin
 ''''''''''''''''''''''''''''''''''''
+
 Sub Admin_Click()
     frmAdminControls.Show
 End Sub
@@ -1587,6 +1607,29 @@ End Sub
 
 
 ''''''''''''''''''''''''''''''''''''
+' Module: modTS_Launchers
+''''''''''''''''''''''''''''''''''''
+
+Option Explicit
+
+'==============================================
+' Module: modTS_Launchers
+' Purpose: Provide entry-point macros for launching tally forms
+'==============================================
+Public Sub LaunchShipmentsTally()
+    Application.ScreenUpdating = False
+    TallyShipments
+    Application.ScreenUpdating = True
+End Sub
+' This should be in your ribbon callback or worksheet button
+Public Sub LaunchReceivedTally()
+    Application.ScreenUpdating = False
+    TallyReceived
+    Application.ScreenUpdating = True
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''
 ' Module: modTS_Log
 ''''''''''''''''''''''''''''''''''''
 Option Explicit
@@ -1679,6 +1722,129 @@ Option Explicit
 ' Module: modTS_Received (TS Received Processing)
 ' Purpose: Process ReceivedTally and invSysData_Receiving without generating new REF_NUMBER
 '==============================================
+' It aggregates quantities by item and displays them in a list box.
+Sub TallyReceived()
+    On Error GoTo ErrorHandler
+    ' Debug info
+    Debug.Print "TallyReceived: Starting..."
+    ' Verify the worksheet exists
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("ReceivedTally")
+    On Error GoTo ErrorHandler
+    If ws Is Nothing Then
+        MsgBox "The worksheet 'ReceivedTally' does not exist!", vbExclamation
+        Exit Sub
+    End If
+    ' Verify the table exists
+    Dim tbl As ListObject
+    On Error Resume Next
+    Set tbl = ws.ListObjects("ReceivedTally")
+    On Error GoTo ErrorHandler
+    If tbl Is Nothing Then
+        MsgBox "The table 'ReceivedTally' does not exist on worksheet 'ReceivedTally'!", vbExclamation
+        Exit Sub
+    End If
+    ' Create and show form with received items data
+    Dim frm As New frmReceivedTally
+    ' Configure the form
+    With frm
+        ' Make sure the listbox exists and is configured properly
+        .lstBox.Clear
+        .lstBox.ColumnCount = 5  ' ITEM, QTY, UOM, ITEM_CODE(hidden), ROW(hidden)
+        .lstBox.ColumnWidths = "150;50;50;0;0" ' Hide ITEM_CODE and ROW columns
+        .lstBox.AddItem "ITEMS"
+        .lstBox.List(0, 1) = "QUANTITY"
+        .lstBox.List(0, 2) = "UOM"
+    End With
+    ' Populate form directly using our PopulateReceivedForm function
+    PopulateReceivedForm frm
+    ' Show the form if there are items
+    If frm.lstBox.ListCount > 1 Then ' More than just the header row
+        frm.Show vbModal
+    Else
+        MsgBox "No received items to tally", vbInformation
+    End If
+    Exit Sub
+ErrorHandler:
+    MsgBox "Error in TallyReceived: " & Err.Description & " (Error " & Err.Number & ")", vbCritical
+    Debug.Print "Error in TallyReceived: " & Err.Description & " (Error " & Err.Number & ")"
+End Sub
+
+Private Sub PopulateReceivedForm(frm As frmReceivedTally)
+    Dim ws As Worksheet
+    Dim inputTbl As ListObject
+    Dim dataArr As Variant
+    Dim idxItems As Long, idxQty As Long, idxPrice As Long
+    Dim i As Long
+    Dim defaultUOM As String, uom As String
+    Dim itemName As String, qty As Double, prc As Double
+    Dim qtyDict As Object, priceDict As Object
+    Dim key As Variant
+
+    ' Initialize
+    defaultUOM = "N/A"
+    Set qtyDict = CreateObject("Scripting.Dictionary")
+    Set priceDict = CreateObject("Scripting.Dictionary")
+    Set ws = ThisWorkbook.Sheets("ReceivedTally")
+    Set inputTbl = ws.ListObjects("ReceivedTally")
+
+    ' Validate required columns
+    idxItems = ColumnIndex(inputTbl, "ITEMS")
+    idxQty = ColumnIndex(inputTbl, "QUANTITY")
+    idxPrice = ColumnIndex(inputTbl, "PRICE")
+    If idxItems * idxQty * idxPrice = 0 Then
+        Err.Raise vbObjectError + 2001, , _
+            "Required column missing in 'ReceivedTally': ITEMS, QUANTITY, or PRICE"
+    End If
+
+    ' Exit if no data rows
+    If inputTbl.DataBodyRange Is Nothing Then
+        frm.lstBox.Clear
+        Exit Sub
+    End If
+
+    dataArr = inputTbl.DataBodyRange.value
+
+    ' Aggregate quantities and prices by item name
+    For i = LBound(dataArr, 1) To UBound(dataArr, 1)
+        itemName = CStr(dataArr(i, idxItems))
+        qty = Val(dataArr(i, idxQty))
+        prc = Val(dataArr(i, idxPrice))
+        If qtyDict.Exists(itemName) Then
+            qtyDict(itemName) = qtyDict(itemName) + qty
+            priceDict(itemName) = priceDict(itemName) + prc
+        Else
+            qtyDict.Add itemName, qty
+            priceDict.Add itemName, prc
+        End If
+    Next i
+
+    ' Configure listbox headers
+    With frm.lstBox
+        .Clear
+        .ColumnCount = 4
+        .ColumnWidths = "150;70;50;70"
+        .AddItem "ITEMS"
+        .List(0, 1) = "QUANTITY"
+        .List(0, 2) = "UOM"
+        .List(0, 3) = "PRICE"
+    End With
+
+    ' Populate aggregated data rows
+    For Each key In qtyDict.Keys
+        ' Get UOM for the item (cast key to String)
+        uom = GetUOMFromInvSys(CStr(key), "", "UOM")
+        If Len(Trim(uom)) = 0 Then uom = defaultUOM
+
+        With frm.lstBox
+            .AddItem CStr(key)
+            .List(.ListCount - 1, 1) = qtyDict(key)
+            .List(.ListCount - 1, 2) = uom
+            .List(.ListCount - 1, 3) = priceDict(key)
+        End With
+    Next key
+End Sub
 
 Public Sub ProcessReceivedBatch()
     Dim wsRecv    As Worksheet: Set wsRecv = ThisWorkbook.Sheets("ReceivedTally")
@@ -1750,9 +1916,7 @@ Public Sub ProcessReceivedBatch()
     If Not tblDet.DataBodyRange Is Nothing Then tblDet.DataBodyRange.Delete
 End Sub
 
-'────────────────────────────────────────────────────────────
 ' Pulls UOM, VENDOR, LOCATION, ENTRY_DATE from invSysData_Receiving
-'────────────────────────────────────────────────────────────
 Public Sub GetReceivingDetails( _
     ByVal ItemCode As String, _
     ByVal rowNum As Long, _
@@ -1795,10 +1959,7 @@ Public Sub GetReceivingDetails( _
     Next lr
 End Sub
 
-
-'────────────────────────────────────────────────────────────
 ' Appends a single row into the ReceivedLog table
-'────────────────────────────────────────────────────────────
 Public Sub AppendReceivedLogRecord( _
     ByVal refNum As String, _
     ByVal itemName As String, _
@@ -1838,55 +1999,37 @@ End Sub
 
 
 ''''''''''''''''''''''''''''''''''''
-' Module: modTS_Tally
+' Module: modTS_Shipments
 ''''''''''''''''''''''''''''''''''''
-' ================================================
-' Module: modTS_Tally (TS stands for Tally System)
-' ================================================
+
 Option Explicit
-' This module is responsible for tallying orders and displaying them in a user form.
-' Track if we're already running a tally operation
-Private isRunningTally As Boolean
-' Helper function to normalize text
-Private Function NormalizeText(text As String) As String
-    ' Trim and convert to lowercase for consistent matching
-    Dim result As String
-    result = Trim(text)
-    NormalizeText = LCase(result)
-End Function
+
 Sub TallyShipments()
-    ' Create and show form with shipments data
-    Dim frm As frmShipmentsTally
-    Set frm = New frmShipmentsTally
-    ' Make sure the form has required controls
+    Dim frm As New frmShipmentsTally
+
     If Not FormHasRequiredControls(frm) Then
         MsgBox "The form is missing required controls.", vbCritical
         Exit Sub
     End If
-    ' Configure the form
-    With frm
-        ' Make sure the listbox exists and is configured properly
-        .lstBox.Clear
-        .lstBox.ColumnCount = 3
-        .lstBox.ColumnWidths = "150;50;80" ' Adjust as needed
-        .lstBox.AddItem "ITEMS"
-        .lstBox.List(0, 1) = "QUANTITY"
-        .lstBox.List(0, 2) = "UOM"
+
+    With frm.lstBox
+        .Clear
+        .ColumnCount = 5
+        .ColumnWidths = "150;50;80;0;0"   ' Hide ITEM_CODE & ROW
+        .AddItem "ITEMS"
+        .List(0, 1) = "QUANTITY"
+        .List(0, 2) = "UOM"
     End With
-    ' Populate the form
+
     PopulateShipmentsForm frm
-    ' Show the form if there are items
-    If frm.lstBox.ListCount > 1 Then ' More than just the header row
+
+    If frm.lstBox.ListCount > 1 Then
         frm.Show vbModal
     Else
         MsgBox "No shipments to tally", vbInformation
     End If
 End Sub
-Function FormHasRequiredControls(frm As Object) As Boolean
-    On Error Resume Next
-    FormHasRequiredControls = Not (frm.lstBox Is Nothing)
-    On Error GoTo 0
-End Function
+
 Sub PopulateShipmentsForm(frm As frmShipmentsTally)
     On Error GoTo ErrorHandler
     Dim ws As Worksheet
@@ -1999,79 +2142,95 @@ ErrorHandler:
     Resume Next
 End Sub
 
-Private Sub PopulateReceivedForm(frm As frmReceivedTally)
-    Dim ws As Worksheet
-    Dim inputTbl As ListObject
-    Dim dataArr As Variant
-    Dim idxItems As Long, idxQty As Long, idxPrice As Long
-    Dim i As Long
-    Dim defaultUOM As String, uom As String
-    Dim itemName As String, qty As Double, prc As Double
-    Dim qtyDict As Object, priceDict As Object
-    Dim key As Variant
+Public Sub ProcessShipmentsBatch()
+    Dim wsShip  As Worksheet: Set wsShip = ThisWorkbook.Sheets("ShipmentsTally")
+    Dim tblShip As ListObject:  Set tblShip = wsShip.ListObjects("ShipmentsTally")
+    Dim tblDet  As ListObject:  Set tblDet = wsShip.ListObjects("invSysData_Shipping")
+    Dim wsInv   As Worksheet:   Set wsInv = ThisWorkbook.Sheets("INVENTORY MANAGEMENT")
+    Dim tblInv  As ListObject:  Set tblInv = wsInv.ListObjects("invSys")
+    Dim wsLog   As Worksheet:   Set wsLog = ThisWorkbook.Sheets("ShipmentsLog")
+    Dim tblLog  As ListObject:  Set tblLog = wsLog.ListObjects("ShipmentsLog")
+    Dim i       As Long
 
-    ' Initialize
-    defaultUOM = "N/A"
-    Set qtyDict = CreateObject("Scripting.Dictionary")
-    Set priceDict = CreateObject("Scripting.Dictionary")
-    Set ws = ThisWorkbook.Sheets("ReceivedTally")
-    Set inputTbl = ws.ListObjects("ReceivedTally")
+    For i = 1 To tblShip.ListRows.count
+        Dim refNum   As String, itm   As String
+        Dim qtyNum   As Double
+        Dim uom      As String, vendor  As String, location  As String
+        Dim code     As String, rowNum  As Long
+        Dim entryDate As Date, newRow As ListRow
 
-    ' Validate required columns
-    idxItems = ColumnIndex(inputTbl, "ITEMS")
-    idxQty = ColumnIndex(inputTbl, "QUANTITY")
-    idxPrice = ColumnIndex(inputTbl, "PRICE")
-    If idxItems * idxQty * idxPrice = 0 Then
-        Err.Raise vbObjectError + 2001, , _
-            "Required column missing in 'ReceivedTally': ITEMS, QUANTITY, or PRICE"
-    End If
+        ' 1) Read ORDER_NUMBER, ITEMS, QUANTITY
+        With tblShip.DataBodyRange
+            refNum = CStr(.Cells(i, tblShip.ListColumns("ORDER_NUMBER").Index).value)
+            itm = CStr(.Cells(i, tblShip.ListColumns("ITEMS").Index).value)
+            qtyNum = CDbl(.Cells(i, tblShip.ListColumns("QUANTITY").Index).value)
+        End With
 
-    ' Exit if no data rows
-    If inputTbl.DataBodyRange Is Nothing Then
-        frm.lstBox.Clear
-        Exit Sub
-    End If
+        ' 2) Read detail fields
+        With tblDet.DataBodyRange
+            uom = CStr(.Cells(i, tblDet.ListColumns("UOM").Index).value)
+            vendor = CStr(.Cells(i, tblDet.ListColumns("VENDOR").Index).value)
+            location = CStr(.Cells(i, tblDet.ListColumns("LOCATION").Index).value)
+            code = CStr(.Cells(i, tblDet.ListColumns("ITEM_CODE").Index).value)
+            rowNum = CLng(.Cells(i, tblDet.ListColumns("ROW").Index).value)
+            entryDate = CDate(.Cells(i, tblDet.ListColumns("ENTRY_DATE").Index).value)
+        End With
 
-    dataArr = inputTbl.DataBodyRange.value
+        ' 3) Append to ShipmentsLog
+        Set newRow = tblLog.ListRows.Add
+        With tblLog.ListColumns
+            newRow.Range(1, .item("ORDER_NUMBER").Index).value = refNum
+            newRow.Range(1, .item("ITEMS").Index).value = itm
+            newRow.Range(1, .item("QUANTITY").Index).value = qtyNum
+            newRow.Range(1, .item("UOM").Index).value = uom
+            newRow.Range(1, .item("VENDOR").Index).value = vendor
+            newRow.Range(1, .item("LOCATION").Index).value = location
+            newRow.Range(1, .item("ITEM_CODE").Index).value = code
+            newRow.Range(1, .item("ROW").Index).value = rowNum
+            newRow.Range(1, .item("ENTRY_DATE").Index).value = entryDate
+        End With
 
-    ' Aggregate quantities and prices by item name
-    For i = LBound(dataArr, 1) To UBound(dataArr, 1)
-        itemName = CStr(dataArr(i, idxItems))
-        qty = Val(dataArr(i, idxQty))
-        prc = Val(dataArr(i, idxPrice))
-        If qtyDict.Exists(itemName) Then
-            qtyDict(itemName) = qtyDict(itemName) + qty
-            priceDict(itemName) = priceDict(itemName) + prc
-        Else
-            qtyDict.Add itemName, qty
-            priceDict.Add itemName, prc
-        End If
+        ' 4) Update inventory “SHIPMENTS” column
+        With tblInv.ListRows(rowNum).Range
+            .Cells(tblInv.ListColumns("SHIPMENTS").Index).value = _
+              Val(.Cells(tblInv.ListColumns("SHIPMENTS").Index).value) + qtyNum
+        End With
     Next i
 
-    ' Configure listbox headers
-    With frm.lstBox
-        .Clear
-        .ColumnCount = 4
-        .ColumnWidths = "150;70;50;70"
-        .AddItem "ITEMS"
-        .List(0, 1) = "QUANTITY"
-        .List(0, 2) = "UOM"
-        .List(0, 3) = "PRICE"
-    End With
+    ' 5) Clear staging tables
+    If Not tblShip .DataBodyRange Is Nothing Then tblShip.DataBodyRange.Delete
+    If Not tblDet  .DataBodyRange Is Nothing Then tblDet .DataBodyRange.Delete
+End Sub
 
-    ' Populate aggregated data rows
-    For Each key In qtyDict.Keys
-        ' Get UOM for the item (cast key to String)
-        uom = GetUOMFromInvSys(CStr(key), "", "UOM")
-        If Len(Trim(uom)) = 0 Then uom = defaultUOM
 
-        With frm.lstBox
-            .AddItem CStr(key)
-            .List(.ListCount - 1, 1) = qtyDict(key)
-            .List(.ListCount - 1, 2) = uom
-            .List(.ListCount - 1, 3) = priceDict(key)
-        End With
-    Next key
+''''''''''''''''''''''''''''''''''''
+' Module: modTS_Tally
+''''''''''''''''''''''''''''''''''''
+' ================================================
+' Module: modTS_Tally (TS stands for Tally System)
+' ================================================
+Option Explicit
+
+Private isRunningTally As Boolean
+' Helper function to normalize text
+Private Function NormalizeText(text As String) As String
+    ' Trim and convert to lowercase for consistent matching
+    Dim result As String
+    result = Trim(text)
+    NormalizeText = LCase(result)
+End Function
+
+' Handle Enter/Tab to commit selection
+Private Sub lstBox_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+    If KeyCode = vbKeyReturn Or KeyCode = vbKeyTab Then
+        CommitSelectionAndClose
+        KeyCode = 0
+    End If
+End Sub
+
+' Handle double-click to commit
+Private Sub lstBox_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
+    CommitSelectionAndClose
 End Sub
 
 ' Helper: Get column index by header name
@@ -2084,6 +2243,13 @@ Private Function ColumnIndex(tbl As ListObject, header As String) As Long
         End If
     Next col
     ColumnIndex = 0
+End Function
+
+'*****************************************
+' Helper: get UOM via existing global routine
+'*****************************************
+Private Function GetItemUOMByRowNum(rowNum As String, ItemCode As String, itemName As String) As String
+    GetItemUOMByRowNum = modGlobals.GetItemUOMByRowNum(rowNum, ItemCode, itemName)
 End Function
 
 ' Helper: Get a field from invSys master by ROW
@@ -2103,67 +2269,6 @@ Private Function GetInvSysValue(rowNum As String, ItemCode As String, header As 
     GetInvSysValue = ""
 End Function
 
-
-' It aggregates quantities by item and displays them in a list box.
-Sub TallyReceived()
-    On Error GoTo ErrorHandler
-    ' Debug info
-    Debug.Print "TallyReceived: Starting..."
-    ' Verify the worksheet exists
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("ReceivedTally")
-    On Error GoTo ErrorHandler
-    If ws Is Nothing Then
-        MsgBox "The worksheet 'ReceivedTally' does not exist!", vbExclamation
-        Exit Sub
-    End If
-    ' Verify the table exists
-    Dim tbl As ListObject
-    On Error Resume Next
-    Set tbl = ws.ListObjects("ReceivedTally")
-    On Error GoTo ErrorHandler
-    If tbl Is Nothing Then
-        MsgBox "The table 'ReceivedTally' does not exist on worksheet 'ReceivedTally'!", vbExclamation
-        Exit Sub
-    End If
-    ' Create and show form with received items data
-    Dim frm As New frmReceivedTally
-    ' Configure the form
-    With frm
-        ' Make sure the listbox exists and is configured properly
-        .lstBox.Clear
-        .lstBox.ColumnCount = 5  ' ITEM, QTY, UOM, ITEM_CODE(hidden), ROW(hidden)
-        .lstBox.ColumnWidths = "150;50;50;0;0" ' Hide ITEM_CODE and ROW columns
-        .lstBox.AddItem "ITEMS"
-        .lstBox.List(0, 1) = "QUANTITY"
-        .lstBox.List(0, 2) = "UOM"
-    End With
-    ' Populate form directly using our PopulateReceivedForm function
-    PopulateReceivedForm frm
-    ' Show the form if there are items
-    If frm.lstBox.ListCount > 1 Then ' More than just the header row
-        frm.Show vbModal
-    Else
-        MsgBox "No received items to tally", vbInformation
-    End If
-    Exit Sub
-ErrorHandler:
-    MsgBox "Error in TallyReceived: " & Err.Description & " (Error " & Err.Number & ")", vbCritical
-    Debug.Print "Error in TallyReceived: " & Err.Description & " (Error " & Err.Number & ")"
-End Sub
-' This should be in your ribbon callback or worksheet button
-Public Sub LaunchShipmentsTally()
-    Application.ScreenUpdating = False
-    TallyShipments
-    Application.ScreenUpdating = True
-End Sub
-' This should be in your ribbon callback or worksheet button
-Public Sub LaunchReceivedTally()
-    Application.ScreenUpdating = False
-    TallyReceived
-    Application.ScreenUpdating = True
-End Sub
 ' Helper function to find a row by column value
 Private Function FindRowByValue(tbl As ListObject, colName As String, value As Variant) As Long
     Dim i As Long
@@ -3684,11 +3789,5 @@ Private Function GetWindowUnderCursor() As LongPtr
 End Function
 
 #End If 'End of #If Mac
-
-
-''''''''''''''''''''''''''''''''''''
-' Module: modTS_Shipments
-''''''''''''''''''''''''''''''''''''
-
 
 
