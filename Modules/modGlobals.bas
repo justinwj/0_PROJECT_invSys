@@ -1,4 +1,5 @@
 Attribute VB_Name = "modGlobals"
+
 '====================
 ' Modules: modGlobals
 '====================

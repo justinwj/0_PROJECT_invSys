@@ -7,8 +7,10 @@ Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
+
 '// CLASS MODULE: clsBulkSnapshot,a part of UR (UndoRedo system)
 Option Explicit
+
 Public SnapshotID As String
 Public data As Variant  ' Stores inventory values
 Public Formulas As Object ' Stores formulas using a Dictionary
@@ -18,11 +20,4 @@ Public timestamp As Date
 Private Sub class_initialize()
     Set Formulas = CreateObject("Scripting.Dictionary") ' ? Fix: Initialize Dictionary
 End Sub
-
-
-''''''''''''''''''''''''''''''''''''
-' class modules differ from regular modules in that they can have properties and methods.
-' This class is used to create a snapshot of the inventory data for bulk operations. in regular modules properties and
-' methods are not allowed.
-''''''''''''''''''''''''''''''''''''
 

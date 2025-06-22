@@ -196,6 +196,49 @@ Public Sub ProcessShipmentsBatch()
     Next i
 
     ' 5) Clear staging tables
-    If Not tblShip .DataBodyRange Is Nothing Then tblShip.DataBodyRange.Delete
-    If Not tblDet  .DataBodyRange Is Nothing Then tblDet .DataBodyRange.Delete
+    If Not tblShip.DataBodyRange Is Nothing Then tblShip.DataBodyRange.Delete
+    If Not tblDet.DataBodyRange Is Nothing Then tblDet .DataBodyRange.Delete
 End Sub
+
+    Public Function GetUOMFromDataTable(item As String, ItemCode As String, rowNum As String) As String
+    Dim ws  As Worksheet
+    Dim tbl As ListObject
+    Dim findCol As Long
+    Dim cel As Range
+    
+    Set ws = ThisWorkbook.Sheets("ShipmentsTally")
+    Set tbl = ws.ListObjects("invSysData_Shipping")
+    findCol = tbl.ListColumns("ROW").Index
+    
+    ' Match by ROW
+    If rowNum <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.Value) = rowNum Then
+                GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).Value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    ' Match by ITEM_CODE
+    findCol = tbl.ListColumns("ITEM_CODE").Index
+    If ItemCode <> "" Then
+        For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+            If CStr(cel.Value) = ItemCode Then
+                GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).Value
+                Exit Function
+            End If
+        Next
+    End If
+    
+    ' Match by ITEM
+    findCol = tbl.ListColumns("ITEM").Index
+    For Each cel In tbl.DataBodyRange.Columns(findCol).Cells
+        If CStr(cel.Value) = item Then
+            GetUOMFromDataTable = cel.Offset(0, tbl.ListColumns("UOM").Index - findCol).Value
+            Exit Function
+        End If
+    Next
+    
+    GetUOMFromDataTable = ""
+End Function

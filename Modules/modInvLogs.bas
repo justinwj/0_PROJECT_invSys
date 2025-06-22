@@ -1,4 +1,5 @@
 Attribute VB_Name = "modInvLogs"
+
 '// MODULE: modInvLogs
 Option Explicit
 ' LogMultipleInventoryChanges now returns the number of rows inserted.

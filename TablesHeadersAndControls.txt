@@ -67,6 +67,8 @@ Sheet (Code): ShipmentsTally
     Headers: UOM, VENDOR, LOCATION, ITEM_CODE, ROW, ENTRY_DATE, TALLY_ROW
   Table: ShippingSavedList
     Headers: SAVED LIST
+  Table: Table19
+    Headers: frmReceivedTally, frmShipmentsTally
   Form Control: Button 2
     Type: Button (0)
     Text: Undo

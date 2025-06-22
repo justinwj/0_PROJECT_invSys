@@ -1,4 +1,5 @@
 Attribute VB_Name = "modInvMan"
+
 Public Sub AddGoodsReceived_Click()
     Dim ws As Worksheet
     Dim tbl As ListObject

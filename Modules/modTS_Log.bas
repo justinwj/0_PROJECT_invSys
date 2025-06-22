@@ -1,12 +1,10 @@
 Attribute VB_Name = "modTS_Log"
-Option Explicit
-
 
 '==============================================
 ' Module: modTS_Log (TS stands for Tally System)
 ' Purpose: Log received items into ReceivedLog table
 '==============================================
-
+Option Explicit
 '────────────────────────────────────────────────────────────
 ' Logs received items with provided REF_NUMBER into ReceivedLog table
 ' receivedSummary.Keys each map to a 10-element array:
