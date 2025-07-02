@@ -19,13 +19,3 @@ End Sub
 Private Sub btnEditUser_Click()
     frmEditUser.Show
 End Sub
-
-''''''''''''''''''''''''''''''''''''
-' Component: ThisWorkbook
-''''''''''''''''''''''''''''''''''''
-''''''''''''''''''''''''''''''''''''
-' Component: ThisWorkbook
-''''''''''''''''''''''''''''''''''''
-''''''''''''''''''''''''''''''''''''
-' Component: ThisWorkbook
-''''''''''''''''''''''''''''''''''''  

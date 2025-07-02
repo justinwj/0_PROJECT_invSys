@@ -4,6 +4,12 @@ Attribute VB_Name = "modGlobals"
 ' Modules: modGlobals
 '====================
 Option Explicit
+
+Public Const STATUS_ACTIVE      As String = "ACTIVE"
+Public Const STATUS_DEPRECATED  As String = "DEPRECATED"
+Public Const STATUS_OBSOLETE    As String = "OBSOLETE"
+Public Const STATUS_REMOVED     As String = "REMOVED"
+Public Const STATUS_INACTIVE    As String = "INACTIVE"
 Public gSelectedCell As Range
 Public Sub CommitSelectionAndCloseWrapper()
     frmItemSearch.CommitSelectionAndClose
