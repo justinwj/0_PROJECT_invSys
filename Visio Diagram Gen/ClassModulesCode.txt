@@ -1,0 +1,253 @@
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsCallSite
+''''''''''''''''''''''''''''''''''''
+' clsCallSite
+' Class data for modDiagramCore
+Option Explicit
+
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsMasterMeta
+''''''''''''''''''''''''''''''''''''
+Option Explicit
+
+' Class module: clsMasterMeta
+' Represents metadata for a Visio stencil master
+
+' Private backing variables
+Private pFileName As String
+Private pDisplayNameU As String
+Private pDisplayName As String
+Private pID As Long
+Private pWidth As Double
+Private pHeight As Double
+Private pPath As String
+Private pLangCode As String
+
+' FileName
+Public Property Get FileName() As String
+    FileName = pFileName
+End Property
+Public Property Let FileName(ByVal value As String)
+    pFileName = value
+End Property
+
+' DisplayNameU (unique key)
+Public Property Get DisplayNameU() As String
+    DisplayNameU = pDisplayNameU
+End Property
+Public Property Let DisplayNameU(ByVal value As String)
+    pDisplayNameU = value
+End Property
+
+' DisplayName (human-readable name)
+Public Property Get DisplayName() As String
+    DisplayName = pDisplayName
+End Property
+Public Property Let DisplayName(ByVal value As String)
+    pDisplayName = value
+End Property
+
+' ID
+Public Property Get ID() As Long
+    ID = pID
+End Property
+Public Property Let ID(ByVal value As Long)
+    pID = value
+End Property
+
+' Width
+Public Property Get Width() As Double
+    Width = pWidth
+End Property
+Public Property Let Width(ByVal value As Double)
+    pWidth = value
+End Property
+
+' Height
+Public Property Get Height() As Double
+    Height = pHeight
+End Property
+Public Property Let Height(ByVal value As Double)
+    pHeight = value
+End Property
+
+' Path
+Public Property Get Path() As String
+    Path = pPath
+End Property
+Public Property Let Path(ByVal value As String)
+    pPath = value
+End Property
+
+' LangCode
+Public Property Get LangCode() As String
+    LangCode = pLangCode
+End Property
+Public Property Let LangCode(ByVal value As String)
+    pLangCode = value
+End Property
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsDiagramConfig
+''''''''''''''''''''''''''''''''''''
+' clsDiagramConfig
+' Class data for modDiagramCore
+' Class Module: clsDiagramConfig
+' Holds configuration parameters for diagram generation
+Option Explicit
+
+Private pDiagramType  As String
+Private pModuleFilter As String
+Private pProcFilter   As String
+Private pScaleMode    As String
+Private pExportFormat As String
+
+' DiagramType property
+Public Property Get DiagramType() As String
+    DiagramType = pDiagramType
+End Property
+Public Property Let DiagramType(ByVal value As String)
+    pDiagramType = value
+End Property
+
+' ModuleFilter property
+Public Property Get moduleFilter() As String
+    moduleFilter = pModuleFilter
+End Property
+Public Property Let moduleFilter(ByVal value As String)
+    pModuleFilter = value
+End Property
+
+' ProcFilter property
+Public Property Get procFilter() As String
+    procFilter = pProcFilter
+End Property
+Public Property Let procFilter(ByVal value As String)
+    pProcFilter = value
+End Property
+
+' ScaleMode property
+Public Property Get ScaleMode() As String
+    ScaleMode = pScaleMode
+End Property
+Public Property Let ScaleMode(ByVal value As String)
+    pScaleMode = value
+End Property
+
+' ExportFormat property
+Public Property Get ExportFormat() As String
+    ExportFormat = pExportFormat
+End Property
+Public Property Let ExportFormat(ByVal value As String)
+    pExportFormat = value
+End Property
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsDiagramItem
+''''''''''''''''''''''''''''''''''''
+Option Explicit
+
+' Class module: clsDiagramItem
+' Represents a single diagram element for rendering
+
+' Private backing variables
+Private pStencilNameU As String
+Private pLabelText As String
+Private pPosX As Double
+Private pPosY As Double
+
+' StencilNameU
+Public Property Get StencilNameU() As String
+    StencilNameU = pStencilNameU
+End Property
+Public Property Let StencilNameU(ByVal value As String)
+    pStencilNameU = value
+End Property
+
+' LabelText
+Public Property Get LabelText() As String
+    LabelText = pLabelText
+End Property
+Public Property Let LabelText(ByVal value As String)
+    pLabelText = value
+End Property
+
+' PosX
+Public Property Get PosX() As Double
+    PosX = pPosX
+End Property
+Public Property Let PosX(ByVal value As Double)
+    pPosX = value
+End Property
+
+' PosY
+Public Property Get PosY() As Double
+    PosY = pPosY
+End Property
+Public Property Let PosY(ByVal value As Double)
+    pPosY = value
+End Property
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsDiagramItemCollection
+''''''''''''''''''''''''''''''''''''
+' clsDiagramItemCollection
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsMapProvider
+''''''''''''''''''''''''''''''''''''
+' clsMapProvider
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsLayoutAlgorithm
+''''''''''''''''''''''''''''''''''''
+' clsLayoutAlgorithm
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsCallSiteMapProvider
+''''''''''''''''''''''''''''''''''''
+' clsCallSiteMapProvider
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsProcMapProvider
+''''''''''''''''''''''''''''''''''''
+' clsProcMapProvider
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsModuleColumnLayout
+''''''''''''''''''''''''''''''''''''
+' clsModuleColumnLayout
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsGridLayout
+''''''''''''''''''''''''''''''''''''
+' clsGridLayout
+Option Explicit
+
+
+

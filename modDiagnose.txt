@@ -1,0 +1,62 @@
+' modDiagnose -- tools for development
+' Diagnostic routine to list all Masters in a Visio stencil and check for a specific master
+Sub Diag_ListStencilMasters(Optional ByVal masterToFind As String = "Container 1")
+    Const visBuiltInStencilContainers As Long = 2
+    Const visMSUS As Long = 0
+    Const visOpenHidden As Long = 64
+
+    Dim visApp As Object, stencilPath As String, stn As Object
+    Dim m As Object, found As Boolean
+
+    On Error GoTo ErrHandler
+
+    Set visApp = CreateObject("Visio.Application")
+    stencilPath = visApp.GetBuiltInStencilFile(visBuiltInStencilContainers, visMSUS)
+    Set stn = visApp.Documents.OpenEx(stencilPath, visOpenHidden)
+
+    Debug.Print "Masters in stencil (" & stencilPath & "):"
+    found = False
+    For Each m In stn.Masters
+        Debug.Print "  - " & m.NameU
+        If LCase$(m.NameU) = LCase$(masterToFind) Then found = True
+    Next
+
+    If found Then
+        Debug.Print "Master '" & masterToFind & "' FOUND in stencil."
+    Else
+        Debug.Print "Master '" & masterToFind & "' NOT FOUND in stencil!"
+        MsgBox "Master '" & masterToFind & "' not found in stencil: " & stencilPath, vbExclamation
+    End If
+
+    Exit Sub
+
+ErrHandler:
+    MsgBox "Error: " & Err.Description, vbCritical
+End Sub
+
+'Call it once from Immediate to see every master in any stencil
+' ListStencilMasters Application.GetBuiltInStencilFile(23, 0)   'Basic Flowchart
+Sub ListStencilMasters(stencilPath As String)
+    Dim stn As Object, m As Object
+    Set stn = Application.Documents.OpenEx(stencilPath, 64)   '64 = visOpenHidden
+    Debug.Print "Masters in stencil (" & stencilPath & "):"
+    For Each m In stn.Masters
+        Debug.Print "  - "; m.NameU
+    Next m
+    stn.Close
+End Sub
+
+Sub Diag_ListBasicUMasters()
+    Const stencilU$ = "BASIC_U.vssx"
+    Const visOpenHidden As Long = 64
+    Dim visApp As Object, stn As Object, m As Object
+
+    Set visApp = CreateObject("Visio.Application")
+    Set stn = visApp.Documents.OpenEx(stencilU, visOpenHidden)
+    Debug.Print "Masters in stencil (" & stencilU & "):"
+    For Each m In stn.Masters
+        Debug.Print "  - " & m.NameU
+    Next
+    stn.Close
+End Sub
+

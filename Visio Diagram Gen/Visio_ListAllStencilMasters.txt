@@ -1,0 +1,238 @@
+' Enumerates all Visio stencil masters in the Visio Content folder and writes their names to the Immediate window.
+Public Sub Diag_ListAllStencilMasters()
+    Const visOpenHidden As Long = 64
+    Dim fso              As Object          ' Scripting.FileSystemObject
+    Dim rootFolder       As Object          ' Scripting.Folder
+    Dim visApp           As Object          ' Visio.Application
+    Dim basePath         As String
+
+    ' 1. Determine the Visio Content folder (adjust language code as needed)
+    basePath = Environ$("ProgramFiles") & _
+               "\Microsoft Office\root\Office16\Visio Content\1033"
+    
+    ' 2. Initialize FileSystemObject
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(basePath) Then
+        MsgBox "Visio Content folder not found: " & basePath, vbExclamation
+        Exit Sub
+    End If
+    Set rootFolder = fso.GetFolder(basePath)
+
+    ' 3. Start Visio (hidden)
+    Set visApp = CreateObject("Visio.Application")
+    visApp.Visible = False
+
+    ' 4. Walk the folder tree and list masters
+    Debug.Print "Listing stencil masters under: " & basePath
+    ListMastersInFolder rootFolder, visApp, visOpenHidden
+
+    ' 5. Clean up
+    visApp.Quit
+    Set visApp = Nothing
+    Set rootFolder = Nothing
+    Set fso = Nothing
+
+    MsgBox "Completed listing all stencil masters. Check the Immediate window.", vbInformation
+End Sub
+' ============================================================================================
+output:
+  - Check Box
+  - Checkbox Group
+  - Radio Button Group
+  - Tree List
+  - Toggle
+  - Number Input
+  - Search Bar
+  - Progress Bar
+  - Hamburger Icon
+  - Hamburger Button
+Stencil: WWFCTRL_U.VSSX
+  - Button
+  - Color Picker
+  - Combo Box
+  - Percentage Range Slider
+  - Number Range Slider
+  - Captcha
+  - Slider
+  - Date Picker
+  - Time Picker
+  - Radio Button
+  - Check Box
+  - Checkbox Group
+  - Radio Button Group
+  - Tree List
+  - Toggle
+  - Number Input
+  - Search Bar
+  - Progress Bar
+  - Hamburger Icon
+  - Hamburger Button
+Stencil: WWFMECTRL_M.VSSX
+  - Icon
+  - Image
+  - Circular Image
+  - Carousel
+  - Banner
+  - Audio Player
+  - Video Player
+  - Map
+  - Webcam Window
+  - Charts
+  - Video
+  - Background
+Stencil: WWFMECTRL_U.VSSX
+  - Icon
+  - Image
+  - Circular Image
+  - Carousel
+  - Banner
+  - Audio Player
+  - Video Player
+  - Map
+  - Webcam Window
+  - Charts
+  - Video
+  - Background
+Stencil: WWFNAVCTRL_M.VSSX
+  - Pagination
+  - Pagination1
+  - Bread Crumb
+  - Divider (Horizontal and Vertical)
+  - Scroll Bar
+  - Spinner
+  - Double Tab Navigation Bar
+  - Tab Bar
+  - Accordion
+  - Horizontal Navigation Bar
+  - Vertical Navigation Bar
+  - Wizard
+Stencil: WWFNAVCTRL_U.VSSX
+  - Pagination
+  - Pagination1
+  - Bread Crumb
+  - Divider (Horizontal and Vertical)
+  - Scroll Bar
+  - Spinner
+  - Double Tab Navigation Bar
+  - Tab Bar
+  - Accordion
+  - Horizontal Navigation Bar
+  - Vertical Navigation Bar
+  - Wizard
+Stencil: WWFTEXTCTRL_M.VSSX
+  - Seperator
+  - Paragraph Text
+  - Tag Cloud
+  - Text Box
+  - Form Entry
+  - Bullet List
+  - Text Hyperlink
+  - Text Editor
+  - Note
+  - Tool tip
+  - Font Selector
+  - Rating
+  - Right Click Menu
+  - Title
+  - Subtitle
+  - Logo
+  - Text
+Stencil: WWFTEXTCTRL_U.VSSX
+  - Seperator
+  - Paragraph Text
+  - Tag Cloud
+  - Text Box
+  - Form Entry
+  - Bullet List
+  - Text Hyperlink
+  - Text Editor
+  - Note
+  - Tool tip
+  - Font Selector
+  - Rating
+  - Right Click Menu
+  - Title
+  - Subtitle
+  - Logo
+  - Text
+Stencil: WWFWICN_M.VSSX
+  - Power
+  - Play
+  - Pause
+  - Stop
+  - Rewind
+  - Fast forward
+  - Previous
+  - Next
+  - Shuffle
+  - Volume
+  - Volume off
+  - Video
+  - Music
+  - Photo
+  - Crop
+  - Rotate left
+  - Rotate right
+  - CD
+  - Call
+  - Camera
+  - Mike
+  - Headset
+  - Speaker
+  - Webcam
+  - Album
+  - Full screen
+Stencil: WWFWICN_U.VSSX
+  - Power
+  - Play
+  - Pause
+  - Stop
+  - Rewind
+  - Fast forward
+  - Previous
+  - Next
+  - Shuffle
+  - Volume
+  - Volume off
+  - Video
+  - Music
+  - Photo
+  - Crop
+  - Rotate left
+  - Rotate right
+  - CD
+  - Call
+  - Camera
+  - Mike
+  - Headset
+  - Speaker
+  - Webcam
+  - Album
+  - Full screen
+Stencil: XFUNC_M.VSSX
+  - Swimlane
+  - Separator
+  - Swimlane (vertical)
+  - Separator (vertical)
+  - CFF Container
+  - Swimlane List
+  - Phase List
+Stencil: XFUNC_U.VSSX
+  - Swimlane
+  - Separator
+  - Swimlane (vertical)
+  - Separator (vertical)
+  - CFF Container
+  - Swimlane List
+  - Phase List
+Stencil: YOURDON_COAD_NOTATION_M.VSSX
+  - External Entity with ID
+  - Data Process
+  - Data Store
+  - External Entity
+Stencil: YOURDON_COAD_NOTATION_U.VSSX
+  - External Entity with ID
+  - Data Process
+  - Data Store
+  - External Entity
+

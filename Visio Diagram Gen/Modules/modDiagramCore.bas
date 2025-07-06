@@ -1,0 +1,166 @@
+Attribute VB_Name = "modDiagramCore"
+' clsLayoutAlgorithm
+Option Explicit
+
+' Ensure you have two class modules: clsMasterMeta and clsDiagramConfig
+' clsMasterMeta with public properties: FileName, DisplayNameU, DisplayName, ID, Width, Height, Path, LangCode
+' clsDiagramConfig with public properties: DiagramType, ModuleFilter, ProcFilter, ScaleMode, ExportFormat
+
+' === Module-level declarations ===
+Private gMasterDict As Object      ' Scripting.Dictionary of clsMasterMeta objects keyed by DisplayNameU
+Private gConfig As clsDiagramConfig
+
+' === Master metadata infrastructure ===
+Public Sub LoadStencilMasterMetadata()
+    Dim ws As Worksheet
+    Dim lastRow As Long, i As Long
+    Dim key As String
+    Dim dict As Object
+    Dim meta As clsMasterMeta
+
+    ' Initialize dictionary
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    ' Read metadata sheet
+    Set ws = ThisWorkbook.Worksheets("StencilMasters")
+    lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
+
+    For i = 2 To lastRow
+        key = Trim(CStr(ws.Cells(i, 2).value))
+        If Len(key) > 0 And Not dict.Exists(key) Then
+            Set meta = New clsMasterMeta
+            With meta
+                .FileName = CStr(ws.Cells(i, 1).value)
+                .DisplayNameU = key
+                .DisplayName = CStr(ws.Cells(i, 3).value)
+                .ID = CLng(ws.Cells(i, 4).value)
+                .Width = CDbl(ws.Cells(i, 5).value)
+                .Height = CDbl(ws.Cells(i, 6).value)
+                .Path = CStr(ws.Cells(i, 7).value)
+                .LangCode = CStr(ws.Cells(i, 8).value)
+            End With
+            dict.Add key, meta
+        End If
+    Next i
+
+    Set gMasterDict = dict
+End Sub
+
+Public Function GetMasterMetadata(ByVal masterNameU As String) As clsMasterMeta
+    If gMasterDict Is Nothing Then LoadStencilMasterMetadata
+    If gMasterDict.Exists(masterNameU) Then
+        Set GetMasterMetadata = gMasterDict(masterNameU)
+    Else
+        Err.Raise vbObjectError + 513, "GetMasterMetadata", _
+            "Master '" & masterNameU & "' not found in metadata."
+    End If
+End Function
+
+' === Configuration loader ===
+Public Sub LoadDiagramConfig()
+    Dim ws As Worksheet
+    Dim lastRow As Long, r As Long
+    Dim cfg As clsDiagramConfig
+
+    Set cfg = New clsDiagramConfig
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("DiagramConfig")
+    On Error GoTo 0
+    If Not ws Is Nothing Then
+        lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
+        For r = 2 To lastRow
+            Select Case UCase(Trim(ws.Cells(r, 1).value))
+                Case "DIAGRAMTYPE":    cfg.DiagramType = CStr(ws.Cells(r, 2).value)
+                Case "MODULEFILTER":   cfg.moduleFilter = CStr(ws.Cells(r, 2).value)
+                Case "PROCFILTER":     cfg.procFilter = CStr(ws.Cells(r, 2).value)
+                Case "SCALEMODE":      cfg.ScaleMode = CStr(ws.Cells(r, 2).value)
+                Case "EXPORTFORMAT":   cfg.ExportFormat = CStr(ws.Cells(r, 2).value)
+            End Select
+        Next r
+    Else
+        ' Defaults
+        cfg.DiagramType = "CallGraph"
+        cfg.moduleFilter = "all mods"
+        cfg.procFilter = "all procs"
+        cfg.ScaleMode = "FitToPage"
+        cfg.ExportFormat = "VSDX"
+    End If
+
+    Set gConfig = cfg
+End Sub
+
+Public Function GetConfig() As clsDiagramConfig
+    If gConfig Is Nothing Then LoadDiagramConfig
+    Set GetConfig = gConfig
+End Function
+
+' === Visio environment setup ===
+' Placeholder for Visio initialization; avoids compile errors if not yet implemented
+Public Sub PrepareVisioEnvironment()
+    ' TODO: implement Visio application and document setup
+End Sub
+
+' === Main orchestrator ===
+Public Sub RunDiagramGeneration()
+    Dim cfg As clsDiagramConfig
+    Dim items As Collection
+    Dim result As Variant
+
+    Set cfg = GetConfig()
+
+    ' 1) Parse and map VBA code to stencil directives
+    ' Use Application.Run to avoid compile errors if modDiagramMaps isn't yet implemented
+    On Error Resume Next
+    result = Application.Run("modDiagramMaps.ParseAndMap", ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
+    On Error GoTo 0
+    If IsObject(result) Then
+        Set items = result
+    Else
+        ' Fallback to empty collection if mapping not available
+        Set items = New Collection
+    End If
+
+    ' 2) Prepare Visio and load master metadata
+    PrepareVisioEnvironment
+    LoadStencilMasterMetadata
+
+    ' 3) Render items onto the Visio page
+    DrawMappedElements items
+
+    ' 4) Apply layout and scaling based on configuration
+    ApplyLayout cfg.ScaleMode
+
+    ' 5) Export diagram to desired format
+    modDiagramExport.SaveDiagram cfg.ExportFormat
+End Sub
+
+' === Rendering routine ===
+Private Sub DrawMappedElements(ByVal items As Collection)
+    Dim itm As Variant
+    Dim meta As clsMasterMeta
+    Dim shp As Object
+
+    For Each itm In items
+        ' itm.DisplayNameU, itm.LabelText, itm.PosX, itm.PosY
+        Set meta = GetMasterMetadata(itm.StencilNameU)
+        Set shp = ActivePage.Drop( _
+            ActiveDocument.Masters.ItemU(meta.DisplayNameU), _
+            itm.PosX, itm.PosY _
+        )
+        shp.Text = itm.LabelText
+    Next itm
+End Sub
+
+' === Layout and scaling ===
+Private Sub ApplyLayout(ByVal ScaleMode As String)
+    Select Case LCase(ScaleMode)
+        Case "fittopage"
+            ActivePage.PageSheet.CellsU("Print.PageScale").FormulaU = "1"
+            ActiveWindow.PageFit = 2  ' visFitPage
+        Case "autotile"
+            ' TODO: implement autotile layout
+        Case Else
+            ' No layout
+    End Select
+End Sub
+

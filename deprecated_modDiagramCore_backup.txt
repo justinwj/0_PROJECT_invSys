@@ -24,34 +24,41 @@ Sub Diag_GenerateCallGraph()
     Dim shapes     As Object: Set shapes = CreateObject("Scripting.Dictionary")
 
     '-- 4. Walk every caller
-    Dim caller As Variant, callee As Variant
+    Dim Caller As Variant, Callee As Variant
     Dim modName As String, mod2 As String
 
-    For Each caller In cg.Keys
-        modName = Split(CStr(caller), ".")(0)
-
+        For Each Caller In cg.Keys
+        modName = Split(CStr(Caller), ".")(0)
         If Not containers.Exists(modName) Then
             Set containers(modName) = DropModuleContainer(pg, modName)
         End If
-        If Not shapes.Exists(caller) Then
-            Set shapes(caller) = DropProcedureShape(containers(modName), Split(caller, ".")(1))
+        If Not shapes.Exists(Caller) Then
+            Set shapes(Caller) = DropProcedureShape(containers(modName), Split(Caller, ".")(1))
         End If
 
-        '-- loop its callees
-        For Each callee In cg(caller)
-            mod2 = Split(CStr(callee), ".")(0)
-
-            If Not containers.Exists(mod2) Then
-                Set containers(mod2) = DropModuleContainer(pg, mod2)
+        '-- single, correct loop over callees
+        For Each Callee In cg(Caller)
+            Dim fullCallee As String
+            If InStr(Callee, ".") = 0 Then
+                fullCallee = modName & "." & Callee
+            Else
+                fullCallee = CStr(Callee)
             End If
-            If Not shapes.Exists(callee) Then
-                Set shapes(callee) = DropProcedureShape(containers(mod2), Split(callee, ".")(1))
+            
+            Dim calleeMod As String
+            calleeMod = Split(fullCallee, ".")(0)
+            
+            If Not containers.Exists(calleeMod) Then
+                Set containers(calleeMod) = DropModuleContainer(pg, calleeMod)
             End If
-
-            ConnectShapes pg, shapes(caller), shapes(callee)
-        Next callee
-    Next caller
-
+            If Not shapes.Exists(fullCallee) Then
+                Set shapes(fullCallee) = DropProcedureShape(containers(calleeMod), Split(fullCallee, ".")(1))
+            End If
+            
+            ConnectShapes pg, shapes(Caller), shapes(fullCallee)
+        Next Callee
+    Next Caller
+    
     '-- 5. Layout + save
     HierarchicalLayout pg
     SaveAndOptionallyOpen visDoc, Environ$("USERPROFILE") & "\Desktop\invSys_CallGraph.vsdx", True
@@ -75,6 +82,20 @@ Public Function GetVbaCallGraph() As Object
     Set GetVbaCallGraph = cg
 End Function
 
+
+Private Function ParseDeclareName(txt As String) As String
+    Dim parts As Variant
+    txt = Replace(txt, vbTab, " ")
+    parts = Split(txt, " ")
+    Dim j As Long
+    For j = 0 To UBound(parts) - 1
+        If LCase(parts(j)) = "function" Or LCase(parts(j)) = "sub" Then
+            ParseDeclareName = parts(j + 1)
+            Exit Function
+        End If
+    Next j
+    ParseDeclareName = ""
+End Function
 
 '==================== IMPLEMENTATION =========================
 Private Sub ScanComponent(vbComp As VBIDE.VBComponent, _
@@ -100,7 +121,7 @@ Private Sub ScanComponent(vbComp As VBIDE.VBComponent, _
         count = cm.ProcCountLines(procName, vbext_pk_Proc)
         body = cm.Lines(start, count)
         
-        Dim callerKey$: callerKey = vbComp.name & "." & procName
+        Dim callerKey$: callerKey = vbComp.Name & "." & procName
         Dim callees As Object: Set callees = ParseProcedureBody(body, builtIns, apiIgnore)
         cg(callerKey) = callees.Keys   'store Keys array for iteration
     Next m
@@ -132,12 +153,12 @@ Private Function ParseProcedureBody(ByVal body As String, _
     reCall.Global = True: reCall.IgnoreCase = True
     
     Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-    Dim m, callee$
+    Dim m, Callee$
     For Each m In reCall.Execute(body)
-        callee = m.SubMatches(0)
-        If Not builtIns.Exists(LCase$(callee)) _
-           And Not apiIgnore.Exists(LCase$(callee)) Then
-            dict(callee) = True
+        Callee = m.SubMatches(0)
+        If Not builtIns.Exists(LCase$(Callee)) _
+           And Not apiIgnore.Exists(LCase$(Callee)) Then
+            dict(Callee) = True
         End If
     Next m
     
@@ -313,8 +334,3 @@ Public Sub ConnectShapes(pg As Object, shpA As Object, shpB As Object)
     conn.CellsU("BeginX").GlueTo shpA.CellsU("PinX")
     conn.CellsU("EndX").GlueTo shpB.CellsU("PinX")
 End Sub
-
-
-
-
-

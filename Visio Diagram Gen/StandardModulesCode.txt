@@ -1,0 +1,965 @@
+''''''''''''''''''''''''''''''''''''
+' Module: PingVisio
+''''''''''''''''''''''''''''''''''''
+Sub PingVisio()
+    Dim visApp As Object
+    Set visApp = CreateObject("Visio.Application")
+    MsgBox "Visio version: " & visApp.Version          'should show 16.0.xxxx
+    visApp.Quit
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagramCore
+''''''''''''''''''''''''''''''''''''
+' modDiagramCore
+Option Explicit
+
+' Ensure you have two class modules: clsMasterMeta and clsDiagramConfig
+' clsMasterMeta with public properties: FileName, DisplayNameU, DisplayName, ID, Width, Height, Path, LangCode
+' clsDiagramConfig with public properties: DiagramType, ModuleFilter, ProcFilter, ScaleMode, ExportFormat
+
+' === Module-level declarations ===
+Private gMasterDict As Object      ' Scripting.Dictionary of clsMasterMeta objects keyed by DisplayNameU
+Private gConfig As clsDiagramConfig
+
+' === Master metadata infrastructure ===
+Public Sub LoadStencilMasterMetadata()
+    Dim ws As Worksheet
+    Dim lastRow As Long, i As Long
+    Dim key As String
+    Dim dict As Object
+    Dim meta As clsMasterMeta
+
+    ' Initialize dictionary
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    ' Read metadata sheet
+    Set ws = ThisWorkbook.Worksheets("StencilMasters")
+    lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
+
+    For i = 2 To lastRow
+        key = Trim(CStr(ws.Cells(i, 2).value))
+        If Len(key) > 0 And Not dict.Exists(key) Then
+            Set meta = New clsMasterMeta
+            With meta
+                .FileName = CStr(ws.Cells(i, 1).value)
+                .DisplayNameU = key
+                .DisplayName = CStr(ws.Cells(i, 3).value)
+                .ID = CLng(ws.Cells(i, 4).value)
+                .Width = CDbl(ws.Cells(i, 5).value)
+                .Height = CDbl(ws.Cells(i, 6).value)
+                .Path = CStr(ws.Cells(i, 7).value)
+                .LangCode = CStr(ws.Cells(i, 8).value)
+            End With
+            dict.Add key, meta
+        End If
+    Next i
+
+    Set gMasterDict = dict
+End Sub
+
+Public Function GetMasterMetadata(ByVal masterNameU As String) As clsMasterMeta
+    If gMasterDict Is Nothing Then LoadStencilMasterMetadata
+    If gMasterDict.Exists(masterNameU) Then
+        Set GetMasterMetadata = gMasterDict(masterNameU)
+    Else
+        Err.Raise vbObjectError + 513, "GetMasterMetadata", _
+            "Master '" & masterNameU & "' not found in metadata."
+    End If
+End Function
+
+' === Configuration loader ===
+Public Sub LoadDiagramConfig()
+    Dim ws As Worksheet
+    Dim lastRow As Long, r As Long
+    Dim cfg As clsDiagramConfig
+
+    Set cfg = New clsDiagramConfig
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("DiagramConfig")
+    On Error GoTo 0
+    If Not ws Is Nothing Then
+        lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
+        For r = 2 To lastRow
+            Select Case UCase(Trim(ws.Cells(r, 1).value))
+                Case "DIAGRAMTYPE":    cfg.DiagramType = CStr(ws.Cells(r, 2).value)
+                Case "MODULEFILTER":   cfg.moduleFilter = CStr(ws.Cells(r, 2).value)
+                Case "PROCFILTER":     cfg.procFilter = CStr(ws.Cells(r, 2).value)
+                Case "SCALEMODE":      cfg.ScaleMode = CStr(ws.Cells(r, 2).value)
+                Case "EXPORTFORMAT":   cfg.ExportFormat = CStr(ws.Cells(r, 2).value)
+            End Select
+        Next r
+    Else
+        ' Defaults
+        cfg.DiagramType = "CallGraph"
+        cfg.moduleFilter = "all mods"
+        cfg.procFilter = "all procs"
+        cfg.ScaleMode = "FitToPage"
+        cfg.ExportFormat = "VSDX"
+    End If
+
+    Set gConfig = cfg
+End Sub
+
+Public Function GetConfig() As clsDiagramConfig
+    If gConfig Is Nothing Then LoadDiagramConfig
+    Set GetConfig = gConfig
+End Function
+
+' === Visio environment setup ===
+' Placeholder for Visio initialization; avoids compile errors if not yet implemented
+Public Sub PrepareVisioEnvironment()
+    ' TODO: implement Visio application and document setup
+End Sub
+
+' === Main orchestrator ===
+Public Sub RunDiagramGeneration()
+    Dim cfg As clsDiagramConfig
+    Dim items As Collection
+    Dim result As Variant
+
+    Set cfg = GetConfig()
+
+    ' 1) Parse and map VBA code to stencil directives
+    ' Use Application.Run to avoid compile errors if modDiagramMaps isn't yet implemented
+    On Error Resume Next
+    result = Application.Run("modDiagramMaps.ParseAndMap", ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
+    On Error GoTo 0
+    If IsObject(result) Then
+        Set items = result
+    Else
+        ' Fallback to empty collection if mapping not available
+        Set items = New Collection
+    End If
+
+    ' 2) Prepare Visio and load master metadata
+    PrepareVisioEnvironment
+    LoadStencilMasterMetadata
+
+    ' 3) Render items onto the Visio page
+    DrawMappedElements items
+
+    ' 4) Apply layout and scaling based on configuration
+    ApplyLayout cfg.ScaleMode
+
+    ' 5) Export diagram to desired format
+    modDiagramExport.SaveDiagram cfg.ExportFormat
+End Sub
+
+' === Rendering routine ===
+Private Sub DrawMappedElements(ByVal items As Collection)
+    Dim itm As Variant
+    Dim meta As clsMasterMeta
+    Dim shp As Object
+
+    For Each itm In items
+        ' itm.DisplayNameU, itm.LabelText, itm.PosX, itm.PosY
+        Set meta = GetMasterMetadata(itm.StencilNameU)
+        Set shp = ActivePage.Drop( _
+            ActiveDocument.Masters.ItemU(meta.DisplayNameU), _
+            itm.PosX, itm.PosY _
+        )
+        shp.Text = itm.LabelText
+    Next itm
+End Sub
+
+' === Layout and scaling ===
+Private Sub ApplyLayout(ByVal ScaleMode As String)
+    Select Case LCase(ScaleMode)
+        Case "fittopage"
+            ActivePage.PageSheet.CellsU("Print.PageScale").FormulaU = "1"
+            ActiveWindow.PageFit = 2  ' visFitPage
+        Case "autotile"
+            ' TODO: implement autotile layout
+        Case Else
+            ' No layout
+    End Select
+End Sub
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagnose
+''''''''''''''''''''''''''''''''''''
+' modDiagnose -- tools for development
+' Diagnostic routine to list all Masters in a Visio stencil and check for a specific master
+Option Explicit
+
+Sub Diag_ListStencilMasters(Optional ByVal masterToFind As String = "Container 1")
+    Const visBuiltInStencilContainers As Long = 2
+    Const visMSUS As Long = 0
+    Const visOpenHidden As Long = 64
+
+    Dim visApp As Object, stencilPath As String, stn As Object
+    Dim m As Object, found As Boolean
+
+    On Error GoTo ErrHandler
+
+    Set visApp = CreateObject("Visio.Application")
+    stencilPath = visApp.GetBuiltInStencilFile(visBuiltInStencilContainers, visMSUS)
+    Set stn = visApp.Documents.OpenEx(stencilPath, visOpenHidden)
+
+    Debug.Print "Masters in stencil (" & stencilPath & "):"
+    found = False
+    For Each m In stn.Masters
+        Debug.Print "  - " & m.NameU
+        If LCase$(m.NameU) = LCase$(masterToFind) Then found = True
+    Next
+
+    If found Then
+        Debug.Print "Master '" & masterToFind & "' FOUND in stencil."
+    Else
+        Debug.Print "Master '" & masterToFind & "' NOT FOUND in stencil!"
+        MsgBox "Master '" & masterToFind & "' not found in stencil: " & stencilPath, vbExclamation
+    End If
+
+    Exit Sub
+
+ErrHandler:
+    MsgBox "Error: " & Err.Description, vbCritical
+End Sub
+
+'Call it once from Immediate to see every master in any stencil
+' ListStencilMasters Application.GetBuiltInStencilFile(23, 0)   'Basic Flowchart
+Sub ListStencilMasters(stencilPath As String)
+    Dim stn As Object, m As Object
+    Set stn = Application.Documents.OpenEx(stencilPath, 64)   '64 = visOpenHidden
+    Debug.Print "Masters in stencil (" & stencilPath & "):"
+    For Each m In stn.Masters
+        Debug.Print "  - "; m.NameU
+    Next m
+    stn.Close
+End Sub
+
+Sub Diag_ListBasicUMasters()
+    Const stencilU$ = "BASIC_U.vssx"
+    Const visOpenHidden As Long = 64
+    Dim visApp As Object, stn As Object, m As Object
+
+    Set visApp = CreateObject("Visio.Application")
+    Set stn = visApp.Documents.OpenEx(stencilU, visOpenHidden)
+    Debug.Print "Masters in stencil (" & stencilU & "):"
+    For Each m In stn.Masters
+        Debug.Print "  - " & m.NameU
+    Next
+    stn.Close
+End Sub
+
+' Diag_ListAllStencilMasters: Enumerates all Visio stencil masters in the Visio Content folder
+' and extracts extended metadata to a worksheet for downstream use in modDiagramCore.
+Public Sub Diag_ListAllStencilMasters()
+    Const visOpenHidden As Long = 64
+    Dim fso        As Object     ' Scripting.FileSystemObject
+    Dim rootFolder As Object     ' Scripting.Folder
+    Dim visApp     As Object     ' Visio.Application
+    Dim basePath   As String
+    Dim wb         As Workbook
+    Dim ws         As Worksheet
+    Dim rowIndex   As Long
+    Dim calcMode   As XlCalculation
+    Dim scUpdt     As Boolean
+
+    ' Performance optimizations
+    scUpdt = Application.ScreenUpdating
+    Application.ScreenUpdating = False
+    calcMode = Application.Calculation
+    Application.Calculation = xlCalculationManual
+
+    ' Prepare output worksheet
+    Set wb = ThisWorkbook
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    wb.Worksheets("StencilMasters").Delete
+    Application.DisplayAlerts = True
+    On Error GoTo 0
+
+    Set ws = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.count))
+    ws.Name = "StencilMasters"
+
+    ' Header row
+    With ws
+        .Cells(1, 1).value = "Stencil File"
+        .Cells(1, 2).value = "Master NameU"
+        .Cells(1, 3).value = "Master Name"
+        .Cells(1, 4).value = "Master ID"
+        .Cells(1, 5).value = "Width"
+        .Cells(1, 6).value = "Height"
+        .Cells(1, 7).value = "Stencil Path"
+        .Cells(1, 8).value = "LanguageCode"
+    End With
+    rowIndex = 2
+
+    ' Determine Visio Content folder (try common paths)
+    basePath = Environ$("ProgramFiles") & "\Microsoft Office\root\Office16\Visio Content"
+    If Dir(basePath, vbDirectory) = "" Then
+        basePath = Environ$("ProgramFiles") & "\Microsoft Office\root\Visio\Visio Content"
+    End If
+    If Dir(basePath, vbDirectory) = "" Then
+        MsgBox "Visio Content folder not found.", vbExclamation
+        GoTo CleanUp
+    End If
+
+    ' Initialize FileSystemObject and Visio
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set rootFolder = fso.GetFolder(basePath)
+    Set visApp = CreateObject("Visio.Application")
+    visApp.Visible = False
+
+    ' Extract masters recursively
+    ExtractMastersToSheet rootFolder, visApp, visOpenHidden, ws, rowIndex
+
+CleanUp:
+    ' Cleanup Visio
+    On Error Resume Next
+    If Not visApp Is Nothing Then visApp.Quit
+    Set visApp = Nothing
+    Set rootFolder = Nothing
+    Set fso = Nothing
+
+    ' Restore Excel settings
+    Application.Calculation = calcMode
+    Application.ScreenUpdating = scUpdt
+
+    MsgBox "Completed extracting stencil masters with metadata. See 'StencilMasters' sheet.", vbInformation
+End Sub
+
+' Recursive helper to open each stencil and write metadata
+Private Sub ExtractMastersToSheet(folder As Object, visApp As Object, openFlags As Long, _
+                                   ws As Worksheet, ByRef rowIndex As Long)
+    Dim fileItem    As Object    ' Scripting.File
+    Dim subFolder   As Object    ' Scripting.Folder
+    Dim stencilDoc  As Object    ' Visio.Document
+    Dim masterItem  As Object    ' Visio.Master
+    Dim ext         As String
+    Dim fPath       As String
+    Dim fs          As Object
+    Dim LangCode    As String
+    Dim widthVal    As Double, heightVal As Double
+
+    Set fs = CreateObject("Scripting.FileSystemObject")
+
+    ' Determine language code from folder name
+    LangCode = folder.Name
+
+    For Each fileItem In folder.Files
+        ext = LCase$(fs.GetExtensionName(fileItem.Name))
+        If ext = "vss" Or ext = "vssx" Then
+            fPath = fileItem.Path
+            On Error Resume Next
+            Set stencilDoc = visApp.Documents.OpenEx(fPath, openFlags)
+            If Err.Number = 0 Then
+                For Each masterItem In stencilDoc.Masters
+                    ' Get default dimensions
+                    On Error Resume Next
+                    widthVal = masterItem.CellsU("Width").ResultIU
+                    heightVal = masterItem.CellsU("Height").ResultIU
+                    On Error GoTo 0
+
+                    ws.Cells(rowIndex, 1).value = fileItem.Name
+                    ws.Cells(rowIndex, 2).value = masterItem.NameU
+                    ws.Cells(rowIndex, 3).value = masterItem.Name
+                    ws.Cells(rowIndex, 4).value = masterItem.ID
+                    ws.Cells(rowIndex, 5).value = widthVal
+                    ws.Cells(rowIndex, 6).value = heightVal
+                    ws.Cells(rowIndex, 7).value = fPath
+                    ws.Cells(rowIndex, 8).value = LangCode
+                    rowIndex = rowIndex + 1
+                Next masterItem
+                stencilDoc.Close
+            Else
+                Err.Clear
+            End If
+            On Error GoTo 0
+        End If
+    Next fileItem
+
+    ' Recurse into subfolders
+    For Each subFolder In folder.SubFolders
+        ExtractMastersToSheet subFolder, visApp, openFlags, ws, rowIndex
+    Next subFolder
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagramMaps
+''''''''''''''''''''''''''''''''''''
+' modDiagramMaps
+Option Explicit
+
+' Module: modDiagramMaps
+' Parses VBA modules and procedures into diagram items
+' Applies moduleFilter and procFilter, instantiates clsDiagramItem objects,
+' populates their properties, and returns a Collection of items.
+
+Public Function ParseAndMap(wb As Workbook, moduleFilter As String, procFilter As String) As Collection
+    Dim items As New Collection
+    Dim vbComp As Object  ' VBIDE.VBComponent
+    Dim codeMod As Object ' VBIDE.CodeModule
+    Dim lineIndex As Long
+    Dim procName As String
+    Dim numLines As Long
+    Dim item As clsDiagramItem
+    Dim startLine As Long
+
+    ' Ensure VBIDE reference
+    On Error Resume Next
+    For Each vbComp In wb.VBProject.VBComponents
+        ' Apply module filter (supports "all mods" wildcard)
+        If LCase(moduleFilter) = "all mods" Or LCase(vbComp.Name) Like LCase(moduleFilter) Then
+            Set codeMod = vbComp.CodeModule
+            numLines = codeMod.CountOfLines
+            ' Iterate through all lines to find procedures
+            For lineIndex = 1 To numLines
+                If codeMod.ProcStartLine(codeMod.ProcOfLine(lineIndex, 0), 0) = lineIndex Then
+                    procName = codeMod.ProcOfLine(lineIndex, 0)
+                    ' Apply proc filter (supports "all procs" wildcard)
+                    If LCase(procFilter) = "all procs" Or LCase(procName) Like LCase(procFilter) Then
+                        ' Instantiate a new diagram item
+                        Set item = New clsDiagramItem
+                        With item
+                            .StencilNameU = vbComp.Name    ' Use module name as stencil key by default
+                            .LabelText = procName
+                            .PosX = 0                      ' TODO: compute X position
+                            .PosY = 0                      ' TODO: compute Y position
+                        End With
+                        items.Add item
+                    End If
+                    ' Skip to end of this procedure to avoid duplicates
+                    startLine = codeMod.ProcStartLine(procName, 0) + _
+                                codeMod.ProcCountLines(procName, 0)
+                    lineIndex = startLine
+                End If
+            Next lineIndex
+        End If
+    Next vbComp
+    On Error GoTo 0
+
+    Set ParseAndMap = items
+End Function
+
+
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagramExport
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagramExport
+Option Explicit
+' Stub for SaveDiagram to satisfy compile-time references from modDiagramCore
+
+Public Sub SaveDiagram(ByVal ExportFormat As String)
+        ' TODO: implement diagram export logic, e.g., ActiveDocument.SaveAs with ExportFormat
+End Sub
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modDiagramAlgorithms
+''''''''''''''''''''''''''''''''''''
+' modDiagramAlgorithms
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modTests
+''''''''''''''''''''''''''''''''''''
+' modTests
+Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Module: modImportExportAll
+''''''''''''''''''''''''''''''''''''
+'------------------------------------------------------------
+' Module: modExportImportAll
+' ----put these in the immediate window to run:----
+' ExportAllCodeToSingleFiles
+' ExportTablesHeadersAndControls
+' SyncSheetsCodeBehind
+' SyncFormsCodeBehind
+' SyncClassModules
+' SyncStandardModules
+
+' ReplaceAllCodeFromFiles
+' ExportAllModules
+
+' ListSheetCodeNames
+' ExportUserFormControls
+' SyncSheetsCodeBehind_Diagnostics
+'------------------------------------------------------------
+
+Option Explicit
+' Subroutine to export all modules, classes, forms, and Excel objects (sheets, workbook)
+Sub ExportAllModules()
+    Dim vbComp As VBIDE.VBComponent
+    Dim exportPath As String
+    Dim fso As Object
+    Dim fileItem As Object
+
+    ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    ' Ensure trailing backslash
+    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
+
+    ' Make sure Excel is set to allow programmatic access to VBProject
+    ' (Trust Center > Macro Settings > Trust access to the VBA project object model)
+
+    For Each vbComp In ThisWorkbook.VBProject.VBComponents
+        Select Case vbComp.Type
+            Case vbext_ct_StdModule ' Standard Modules
+                On Error Resume Next
+                vbComp.Export exportPath & "Modules\" & vbComp.Name & ".bas"
+                On Error GoTo 0
+
+            Case vbext_ct_ClassModule ' Class Modules
+                On Error Resume Next
+                vbComp.Export exportPath & "Class Modules\" & vbComp.Name & ".cls"
+                On Error GoTo 0
+
+            Case vbext_ct_MSForm ' UserForms
+                On Error Resume Next
+                vbComp.Export exportPath & "Forms\" & vbComp.Name & ".frm"
+                On Error GoTo 0
+
+            Case vbext_ct_Document ' Sheets and ThisWorkbook
+                On Error Resume Next
+                vbComp.Export exportPath & "Sheets\" & vbComp.Name & ".cls"
+                On Error GoTo 0
+        End Select
+    Next vbComp
+
+    ' Remove FRX files from the Forms folder, if present
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If fso.FolderExists(exportPath & "Forms") Then
+        For Each fileItem In fso.GetFolder(exportPath & "Forms").Files
+            If LCase(fso.GetExtensionName(fileItem.Name)) = "frx" Then
+                fileItem.Delete True
+            End If
+        Next fileItem
+    End If
+
+    MsgBox "Export complete!"
+End Sub
+' Updates Microsoft Visual Basic Editor with latest code from VSC or whatever IDE
+Public Sub ReplaceAllCodeFromFiles()
+    SyncStandardModules
+    SyncClassModules
+    SyncFormsCodeBehind
+    SyncSheetsCodeBehind
+    MsgBox "All VBA code synced!", vbInformation
+End Sub
+' Sync only .bas modules by removing and re-importing
+Public Sub SyncStandardModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = ThisWorkbook.VBProject
+
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "bas" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            ' Skip the exporter module itself
+            If LCase(baseName) = "modexportimportall" Then GoTo NextStandard
+            filePath = fileItem.Path
+
+            On Error Resume Next
+            ' Remove existing module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh module
+            vbProj.VBComponents.Import filePath
+        End If
+NextStandard:
+    Next fileItem
+    ' Notify user when standard modules are imported
+    MsgBox "Standard modules imported successfully!", vbInformation
+End Sub
+
+' Sync only .cls class modules by removing and re-importing
+Public Sub SyncClassModules()
+    Const ROOT_PATH As String = "D:\\justinwj\\Workbooks\\0_PROJECT_invSys\\Class Modules\\"
+    Dim fso As Object
+    Dim vbProj As VBIDE.VBProject
+    Dim fileItem As Object
+    Dim baseName As String
+    Dim filePath As String
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = ThisWorkbook.VBProject
+
+    If Not fso.FolderExists(ROOT_PATH) Then Exit Sub
+    For Each fileItem In fso.GetFolder(ROOT_PATH).Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            baseName = fso.GetBaseName(fileItem.Name)
+            filePath = fileItem.Path
+
+            On Error Resume Next
+            ' Remove existing class module to avoid corruption
+            vbProj.VBComponents.Remove vbProj.VBComponents(baseName)
+            On Error GoTo 0
+            ' Import fresh class module
+            vbProj.VBComponents.Import filePath
+        End If
+    Next fileItem
+    ' Notify user when class modules are imported
+    MsgBox "Class modules imported successfully!", vbInformation
+End Sub
+    
+'updates FRM code to whatever is in ROOT_PATH & Forms
+Public Sub SyncFormsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    Dim fso     As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj  As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder  As Object, fileItem As Object
+    Dim fileText As String, lines As Variant
+    Dim i        As Long, startIdx As Long
+    Dim codeBody As String
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    Dim lineText As String
+
+    If Not fso.FolderExists(ROOT_PATH & "Forms\") Then Exit Sub
+    Set folder = fso.GetFolder(ROOT_PATH & "Forms\")
+
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "frm" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+
+            If vbComp Is Nothing Then
+                Debug.Print "Form not in project: " & compName
+            Else
+                fileText = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+                lines = Split(fileText, vbCrLf)
+
+                ' find first real code line
+                startIdx = -1
+                For i = LBound(lines) To UBound(lines)
+                    lineText = Trim(lines(i))
+                    If lineText = "Option Explicit" _
+                       Or LCase(Left(lineText, 4)) = "sub " _
+                       Or LCase(Left(lineText, 8)) = "function" _
+                       Or LCase(Left(lineText, 7)) = "private" _
+                       Or LCase(Left(lineText, 6)) = "public " Then
+                        startIdx = i: Exit For
+                    End If
+                Next i
+
+                If startIdx >= 0 Then
+                    codeBody = ""
+                    For i = startIdx To UBound(lines)
+                        codeBody = codeBody & lines(i) & vbCrLf
+                    Next i
+                    With vbComp.CodeModule
+                        .DeleteLines 1, .CountOfLines
+                        .InsertLines 1, codeBody
+                    End With
+                Else
+                    Debug.Print "  ? no code found in " & fileItem.Name
+                End If
+            End If
+        End If
+    Next fileItem
+
+    MsgBox "Forms code-behind synced.", vbInformation
+End Sub
+
+' Updates Sheet (Microsoft Excel Objects) code to whatever is in ROOT_PATH
+Public Sub SyncSheetsCodeBehind()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso       As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj    As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder    As Object, fileItem As Object
+    Dim txt       As String, lines As Variant
+    Dim codeBody  As String
+    Dim i         As Long
+    Dim trimmed   As String, lowerText As String
+    Dim compName  As String
+    Dim vbComp    As VBIDE.VBComponent
+
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Sheets folder not found: " & ROOT_PATH, vbExclamation
+        Exit Sub
+    End If
+
+    Set folder = fso.GetFolder(ROOT_PATH)
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            If vbComp Is Nothing Then GoTo NextFile
+
+            txt = fso.OpenTextFile(fileItem.Path, 1).ReadAll
+            lines = Split(txt, vbCrLf)
+            codeBody = ""
+
+            For i = LBound(lines) To UBound(lines)
+                trimmed = Trim(lines(i))
+                lowerText = LCase(trimmed)
+
+                If trimmed = "" Then
+                    ' preserve blank lines
+                    codeBody = codeBody & vbCrLf
+
+                ElseIf Not ( _
+                    lowerText Like "version *" Or _
+                    lowerText Like "begin*" Or _
+                    lowerText = "end" Or _
+                    lowerText Like "attribute *" Or _
+                    lowerText Like "mult?use *" _
+                ) Then
+                    codeBody = codeBody & lines(i) & vbCrLf
+                End If
+            Next i
+
+            With vbComp.CodeModule
+                .DeleteLines 1, .CountOfLines
+                .InsertLines 1, codeBody
+            End With
+
+            Set vbComp = Nothing
+        End If
+NextFile:
+    Next fileItem
+
+    MsgBox "Sheets code-behind synced!", vbInformation
+End Sub
+
+Public Sub SyncSheetsCodeBehind_Diagnostics()
+    Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\Sheets\"
+    Dim fso      As Object: Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim vbProj   As VBIDE.VBProject: Set vbProj = ThisWorkbook.VBProject
+    Dim folder   As Object, fileItem As Object
+    Dim compName As String
+    Dim vbComp   As VBIDE.VBComponent
+    
+    If Not fso.FolderExists(ROOT_PATH) Then
+        MsgBox "Folder not found: " & ROOT_PATH, vbExclamation
+        Exit Sub
+    End If
+    
+    Set folder = fso.GetFolder(ROOT_PATH)
+    Debug.Print "=== Files in Sheets\ ==="
+    For Each fileItem In folder.Files
+        If LCase(fso.GetExtensionName(fileItem.Name)) = "cls" Then
+            compName = fso.GetBaseName(fileItem.Name)
+            Debug.Print "File: "; fileItem.Name; " ? looking for component: "; compName
+            
+            On Error Resume Next
+            Set vbComp = vbProj.VBComponents(compName)
+            On Error GoTo 0
+            
+            If vbComp Is Nothing Then
+                Debug.Print "   ? No matching VBComponent for "; compName
+            Else
+                Debug.Print "   ? Found VBComponent: "; vbComp.Name
+                ' (Here you could inject your DeleteLines/InsertLines logic)
+            End If
+            Set vbComp = Nothing
+        End If
+    Next fileItem
+    
+    MsgBox "Diagnostics complete check the Immediate window (Ctrl+G).", vbInformation
+End Sub
+
+Sub ExportTablesHeadersAndControls()
+    Dim ws As Worksheet
+    Dim lo As ListObject
+    Dim lc As ListColumn
+    Dim ole As OLEObject
+    Dim shp As Shape
+    Dim folderPath As String, outputPath As String
+    Dim Fnum As Long, hdrs As String
+    Dim ctrlType As Long, ctrlTypeName As String
+    ' 1) Set your folder (must already exist)
+    folderPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
+    If Right(folderPath, 1) <> "\" Then folderPath = folderPath & "\"
+    ' 2) Append filename
+    outputPath = folderPath & "TablesHeadersAndControls.txt"
+    Fnum = FreeFile
+    Open outputPath For Output As #Fnum
+    For Each ws In ThisWorkbook.Worksheets
+        Print #Fnum, "Sheet (Tab):  " & ws.Name
+        Print #Fnum, "Sheet (Code): " & ws.CodeName
+        ' ? Tables & Headers ?
+        For Each lo In ws.ListObjects
+            Print #Fnum, "  Table: " & lo.Name
+            hdrs = ""
+            For Each lc In lo.ListColumns
+                hdrs = hdrs & lc.Name & ", "
+            Next lc
+            If Len(hdrs) > 0 Then hdrs = Left(hdrs, Len(hdrs) - 2)
+            Print #Fnum, "    Headers: " & hdrs
+        Next lo
+        ' ? ActiveX Controls ?
+        For Each ole In ws.OLEObjects
+            Print #Fnum, "  ActiveX Control: " & ole.Name & " (" & ole.progID & ")"
+            On Error Resume Next
+            Print #Fnum, "    LinkedCell: " & ole.LinkedCell
+            Print #Fnum, "    TopLeft: " & ole.TopLeftCell.Address(False, False)
+            Print #Fnum, "    Caption: " & ole.Object.Caption
+            Print #Fnum, "    Value: " & ole.Object.value
+            On Error GoTo 0
+        Next ole
+        ' ? Forms Controls ?
+        For Each shp In ws.Shapes
+            If shp.Type = msoFormControl Then
+                ctrlType = shp.FormControlType
+                Select Case ctrlType
+                    Case 0: ctrlTypeName = "Button"
+                    Case 1: ctrlTypeName = "Checkbox"
+                    Case 2: ctrlTypeName = "DropDown"
+                    Case 3: ctrlTypeName = "EditBox"
+                    Case 4: ctrlTypeName = "ListBox"
+                    Case 5: ctrlTypeName = "ScrollBar"
+                    Case 6: ctrlTypeName = "Spinner"
+                    Case Else: ctrlTypeName = "Unknown"
+                End Select
+                Print #Fnum, "  Form Control: " & shp.Name
+                Print #Fnum, "    Type: " & ctrlTypeName & " (" & ctrlType & ")"
+                On Error Resume Next
+                Print #Fnum, "    LinkedCell: " & shp.ControlFormat.LinkedCell
+                If shp.HasTextFrame Then
+                    Print #Fnum, "    Text: " & Replace(shp.TextFrame.Characters.Text, vbCr, " ")
+                End If
+                On Error GoTo 0
+            End If
+        Next shp
+        Print #Fnum, String(60, "-")
+    Next ws
+    Close #Fnum
+    MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
+End Sub
+Sub ExportUserFormControls()
+    Dim vbProj As VBIDE.VBProject
+    Dim vbComp As VBIDE.VBComponent
+    Dim ctrl   As MSForms.Control
+    Dim outputPath As String, Fnum As Long
+    '? adjust folder as needed (must exist) ?
+    outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
+    Fnum = FreeFile
+    Open outputPath For Output As #Fnum
+    Set vbProj = ThisWorkbook.VBProject
+    For Each vbComp In vbProj.VBComponents
+        ' only UserForm components
+        If vbComp.Type = vbext_ct_MSForm Then
+            Print #Fnum, "UserForm: " & vbComp.Name
+            ' iterate its controls
+            For Each ctrl In vbComp.Designer.Controls
+                Print #Fnum, "  Control: " & ctrl.Name & " (" & TypeName(ctrl) & ")"
+                On Error Resume Next
+                ' many controls have a Caption
+                Print #Fnum, "    Caption: " & ctrl.Caption
+                ' and many have a Value
+                Print #Fnum, "    Value: " & ctrl.value
+                On Error GoTo 0
+            Next ctrl
+            Print #Fnum, String(50, "-")
+        End If
+    Next vbComp
+    Close #Fnum
+    MsgBox "UserForm controls exported to:" & vbCrLf & outputPath, vbInformation
+End Sub
+
+' Requires reference to  Microsoft Visual Basic for Applications Extensibility 5.3 
+' and Trust Center > Macro Settings >  Trust access to the VBA project object model  enabled.
+' put all Sheets code into a single TXT file, all Forms code into a TXT file (except FRX files),
+' all Class Modules code into a single TXT file and all Standard Modules code into a single TXT file
+Public Sub ExportAllCodeToSingleFiles()
+    Dim exportPath As String
+    Dim wsFileNum   As Long, frmFileNum As Long
+    Dim clsFileNum  As Long, modFileNum As Long
+    Dim vbComp      As VBIDE.VBComponent
+    Dim codeMod     As VBIDE.CodeModule
+    
+    ' ? Modify this to your desired folder (must already exist)
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
+    
+    ' Open our four output files
+    wsFileNum = FreeFile: Open exportPath & "SheetsCode.txt" For Output As #wsFileNum
+    frmFileNum = FreeFile: Open exportPath & "FormsCode.txt" For Output As #frmFileNum
+    clsFileNum = FreeFile: Open exportPath & "ClassModulesCode.txt" For Output As #clsFileNum
+    modFileNum = FreeFile: Open exportPath & "StandardModulesCode.txt" For Output As #modFileNum
+    
+    ' Loop through every component in this workbook
+    For Each vbComp In ThisWorkbook.VBProject.VBComponents
+        Set codeMod = vbComp.CodeModule
+        Select Case vbComp.Type
+            Case vbext_ct_Document           ' Sheets & ThisWorkbook
+                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #wsFileNum, "' Component: " & vbComp.Name
+                Print #wsFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #wsFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #wsFileNum, vbCrLf
+            
+            Case vbext_ct_MSForm             ' UserForms
+                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #frmFileNum, "' UserForm: " & vbComp.Name
+                Print #frmFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #frmFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #frmFileNum, vbCrLf
+            
+            Case vbext_ct_ClassModule        ' Class modules
+                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #clsFileNum, "' Class Module: " & vbComp.Name
+                Print #clsFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #clsFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #clsFileNum, vbCrLf
+            
+            Case vbext_ct_StdModule          ' Standard (.bas) modules
+                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
+                Print #modFileNum, "' Module: " & vbComp.Name
+                Print #modFileNum, "''''''''''''''''''''''''''''''''''''"
+                If codeMod.CountOfLines > 0 Then
+                    Print #modFileNum, codeMod.lines(1, codeMod.CountOfLines)
+                End If
+                Print #modFileNum, vbCrLf
+        End Select
+    Next vbComp
+    
+    ' Close all files
+    Close #wsFileNum
+    Close #frmFileNum
+    Close #clsFileNum
+    Close #modFileNum
+    
+    MsgBox "All code exported to:" & vbCrLf & _
+           exportPath & vbCrLf & _
+           "(SheetsCode.txt, FormsCode.txt, ClassModulesCode.txt, StandardModulesCode.txt)", _
+           vbInformation
+End Sub
+
+Sub ListSheetCodeNames()
+  Dim c As VBIDE.VBComponent
+  For Each c In ThisWorkbook.VBProject.VBComponents
+    If c.Type = vbext_ct_Document Then
+      Debug.Print "Sheet CodeName: "; c.Name
+    End If
+  Next
+End Sub
+
+
+
+
+

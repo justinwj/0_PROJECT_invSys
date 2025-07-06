@@ -23,9 +23,8 @@ Private Sub Workbook_SheetActivate(ByVal Sh As Object)
     ' frmLogin.Show
 End Sub
 Sub CheckForHiddenPasswords()
-    Dim nm As Name
+    Dim nm As name
     For Each nm In ThisWorkbook.Names
-        Debug.Print nm.Name & " = " & nm.RefersTo
+        Debug.Print nm.name & " = " & nm.RefersTo
     Next nm
 End Sub
-
