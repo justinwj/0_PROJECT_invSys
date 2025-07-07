@@ -1,0 +1,156 @@
+'----- In clsDiagramConfig.cls -----
+Option Explicit
+
+' Private backing fields
+Private pDiagramType   As String
+Private pModuleFilter  As String
+Private pProcFilter    As String
+Private pScaleMode     As String
+Private pExportFormat  As String
+
+' Initialize default values when class is created
+Private Sub Class_Initialize()
+    pDiagramType   = "CallGraph"
+    pModuleFilter  = "*"
+    pProcFilter    = "*"
+    pScaleMode     = "FitToPage"
+    pExportFormat  = "PNG"
+End Sub
+
+' Property Get/Let for DiagramType
+Public Property Get DiagramType() As String
+    DiagramType = pDiagramType
+End Property
+Public Property Let DiagramType(ByVal Value As String)
+    pDiagramType = Value
+End Property
+
+' Property Get/Let for ModuleFilter
+Public Property Get ModuleFilter() As String
+    ModuleFilter = pModuleFilter
+End Property
+Public Property Let ModuleFilter(ByVal Value As String)
+    pModuleFilter = Value
+End Property
+
+' Property Get/Let for ProcFilter
+Public Property Get ProcFilter() As String
+    ProcFilter = pProcFilter
+End Property
+Public Property Let ProcFilter(ByVal Value As String)
+    pProcFilter = Value
+End Property
+
+' Property Get/Let for ScaleMode
+Public Property Get ScaleMode() As String
+    ScaleMode = pScaleMode
+End Property
+Public Property Let ScaleMode(ByVal Value As String)
+    pScaleMode = Value
+End Property
+
+' Property Get/Let for ExportFormat
+Public Property Get ExportFormat() As String
+    ExportFormat = pExportFormat
+End Property
+Public Property Let ExportFormat(ByVal Value As String)
+    pExportFormat = Value
+End Property
+
+'----- In modDiagramCore.bas (standard module) -----
+Option Explicit
+
+' Reads values from the DiagramConfig table into the cfg object
+Public Sub LoadDiagramConfig(ByVal cfg As clsDiagramConfig)
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim rw As ListRow
+    Dim key As String, val As Variant
+    Set ws = ThisWorkbook.Worksheets("DiagramConfig")
+    On Error GoTo ErrHandler
+    Set tbl = ws.ListObjects("DiagramConfig")
+    For Each rw In tbl.ListRows
+        key = UCase(Trim(rw.Range.Cells(1, 1).Value))
+        val = rw.Range.Cells(1, 2).Value
+        Select Case key
+            Case "DIAGRAMTYPE":   cfg.DiagramType = val
+            Case "MODULEFILTER":  cfg.ModuleFilter = val
+            Case "PROCFILTER":    cfg.ProcFilter = val
+            Case "SCALEMODE":     cfg.ScaleMode = val
+            Case "EXPORTFORMAT":  cfg.ExportFormat = val
+        End Select
+    Next rw
+    Exit Sub
+ErrHandler:
+    Debug.Print "Error loading DiagramConfig: ", Err.Description
+End Sub
+
+' Factory function to create and return a populated configuration
+Public Function GetConfig() As clsDiagramConfig
+    Dim cfg As clsDiagramConfig
+    Set cfg = New clsDiagramConfig   ' Sets defaults in Class_Initialize
+    LoadDiagramConfig cfg            ' Overwrite with table values
+    Set GetConfig = cfg              ' Return the instance
+End Function
+
+'--------------------------------------------------
+' RunDiagramGeneration: full pipeline using config-driven parameters
+Public Sub RunDiagramGeneration()
+    Dim cfg As clsDiagramConfig
+    Dim items As Collection
+    Dim result As Variant
+
+    ' 1) Load user-defined settings
+    Set cfg = GetConfig()
+    Debug.Print "[Diagram] Type=" & cfg.DiagramType & _
+                "; ModuleFilter=" & cfg.ModuleFilter & _
+                "; ProcFilter=" & cfg.ProcFilter
+
+    ' 2) Parse and map VBA code to Visio stencil directives
+    '    Use Application.Run to safely call external mapping module
+    On Error Resume Next
+    result = Application.Run("modDiagramMaps.ParseAndMap", _
+                             ThisWorkbook, cfg.ModuleFilter, cfg.ProcFilter)
+    On Error GoTo 0
+    If TypeName(result) = "Collection" Then
+        Set items = result
+    Else
+        Set items = New Collection  ' fallback empty set
+        Debug.Print "[Diagram] Warning: no mapped items returned."
+    End If
+
+    ' 3) Prepare Visio environment and load stencil masters
+    PrepareVisioEnvironment
+    LoadStencilMasterMetadata
+
+    ' 4) Render mapped items onto the Visio page
+    '    DrawMappedElements signature now includes layout and export args
+    DrawMappedElements items, cfg.ScaleMode, cfg.ExportFormat
+
+    ' 5) Post-render: apply additional layout (tiling, fitting, etc.)
+    ApplyLayout cfg.ScaleMode
+
+    ' 6) Export diagram using configured format
+    modDiagramExport.SaveDiagram cfg.ExportFormat
+
+    Debug.Print "[Diagram] Generation complete."
+End Sub
+
+' Note: Adjust DrawMappedElements signature to accept config args
+' Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As String, ByVal ExportFormat As String)
+'     ' …render shapes, apply ScaleMode settings, ready for export…
+' End Sub
+
+' Smoke test to verify config loading only
+Public Sub TestLoadConfig()
+    Dim cfg As clsDiagramConfig
+    Set cfg = GetConfig()
+    Debug.Print "Type:    ", cfg.DiagramType
+    Debug.Print "ModFil:  ", cfg.ModuleFilter
+    Debug.Print "PrFil:   ", cfg.ProcFilter
+    Debug.Print "Scale:   ", cfg.ScaleMode
+    Debug.Print "ExpFmt:  ", cfg.ExportFormat
+End Sub
+
+
+

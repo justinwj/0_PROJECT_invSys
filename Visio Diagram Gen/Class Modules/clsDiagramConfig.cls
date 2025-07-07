@@ -13,48 +13,58 @@ Attribute VB_Exposed = False
 ' Holds configuration parameters for diagram generation
 Option Explicit
 
-Private pDiagramType  As String
-Private pModuleFilter As String
-Private pProcFilter   As String
-Private pScaleMode    As String
-Private pExportFormat As String
+' Private backing fields
+Private pDiagramType   As String
+Private pModuleFilter  As String
+Private pProcFilter    As String
+Private pScaleMode     As String
+Private pExportFormat  As String
 
-' DiagramType property
+' Initialize default values when class is created
+Private Sub Class_Initialize()
+    pDiagramType = "CallGraph"
+    pModuleFilter = "*"
+    pProcFilter = "*"
+    pScaleMode = "FitToPage"
+    pExportFormat = "PNG"
+End Sub
+
+' Property Get/Let for DiagramType
 Public Property Get DiagramType() As String
     DiagramType = pDiagramType
 End Property
-Public Property Let DiagramType(ByVal value As String)
-    pDiagramType = value
+Public Property Let DiagramType(ByVal Value As String)
+    pDiagramType = Value
 End Property
 
-' ModuleFilter property
+' Property Get/Let for ModuleFilter
 Public Property Get moduleFilter() As String
     moduleFilter = pModuleFilter
 End Property
-Public Property Let moduleFilter(ByVal value As String)
-    pModuleFilter = value
+Public Property Let moduleFilter(ByVal Value As String)
+    pModuleFilter = Value
 End Property
 
-' ProcFilter property
+' Property Get/Let for ProcFilter
 Public Property Get procFilter() As String
     procFilter = pProcFilter
 End Property
-Public Property Let procFilter(ByVal value As String)
-    pProcFilter = value
+Public Property Let procFilter(ByVal Value As String)
+    pProcFilter = Value
 End Property
 
-' ScaleMode property
+' Property Get/Let for ScaleMode
 Public Property Get ScaleMode() As String
     ScaleMode = pScaleMode
 End Property
-Public Property Let ScaleMode(ByVal value As String)
-    pScaleMode = value
+Public Property Let ScaleMode(ByVal Value As String)
+    pScaleMode = Value
 End Property
 
-' ExportFormat property
+' Property Get/Let for ExportFormat
 Public Property Get ExportFormat() As String
     ExportFormat = pExportFormat
 End Property
-Public Property Let ExportFormat(ByVal value As String)
-    pExportFormat = value
+Public Property Let ExportFormat(ByVal Value As String)
+    pExportFormat = Value
 End Property

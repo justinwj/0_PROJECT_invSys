@@ -69,7 +69,7 @@ Sub ExportAllModules()
 
     MsgBox "Export complete!"
 End Sub
-
+' Updates Microsoft Visual Basic Editor with latest code from VSC or whatever IDE
 Public Sub ReplaceAllCodeFromFiles()
     SyncStandardModules
     SyncClassModules
@@ -140,7 +140,7 @@ Public Sub SyncClassModules()
     MsgBox "Class modules imported successfully!", vbInformation
 End Sub
     
-'updates code to whatever is in ROOT_PATH & Forms
+'updates FRM code to whatever is in ROOT_PATH & Forms
 Public Sub SyncFormsCodeBehind()
     Const ROOT_PATH As String = "D:\justinwj\Workbooks\0_PROJECT_invSys\"
     Dim fso     As Object: Set fso = CreateObject("Scripting.FileSystemObject")
@@ -338,7 +338,7 @@ Sub ExportTablesHeadersAndControls()
             Print #Fnum, "    LinkedCell: " & ole.LinkedCell
             Print #Fnum, "    TopLeft: " & ole.TopLeftCell.Address(False, False)
             Print #Fnum, "    Caption: " & ole.Object.Caption
-            Print #Fnum, "    Value: " & ole.Object.value
+            Print #Fnum, "    Value: " & ole.Object.Value
             On Error GoTo 0
         Next ole
         ' ? Forms Controls ?
@@ -370,10 +370,10 @@ Sub ExportTablesHeadersAndControls()
     Close #Fnum
     MsgBox "Export complete:" & vbCrLf & outputPath, vbInformation
 End Sub
-Sub ExportUserFormControls()
+Sub ExportUserFormControls(frm As Object)
     Dim vbProj As VBIDE.VBProject
     Dim vbComp As VBIDE.VBComponent
-    Dim ctrl   As MSForms.Control
+    Dim ctrl As Object
     Dim outputPath As String, Fnum As Long
     '? adjust folder as needed (must exist) ?
     outputPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\UserFormControls.txt"
@@ -391,7 +391,7 @@ Sub ExportUserFormControls()
                 ' many controls have a Caption
                 Print #Fnum, "    Caption: " & ctrl.Caption
                 ' and many have a Value
-                Print #Fnum, "    Value: " & ctrl.value
+                Print #Fnum, "    Value: " & ctrl.Value
                 On Error GoTo 0
             Next ctrl
             Print #Fnum, String(50, "-")
@@ -403,7 +403,8 @@ End Sub
 
 ' Requires reference to “Microsoft Visual Basic for Applications Extensibility 5.3”
 ' and Trust Center > Macro Settings > “Trust access to the VBA project object model” enabled.
-
+' put all Sheets code into a single TXT file, all Forms code into a TXT file (except FRX files),
+' all Class Modules code into a single TXT file and all Standard Modules code into a single TXT file
 Public Sub ExportAllCodeToSingleFiles()
     Dim exportPath As String
     Dim wsFileNum   As Long, frmFileNum As Long
@@ -412,7 +413,7 @@ Public Sub ExportAllCodeToSingleFiles()
     Dim codeMod     As VBIDE.CodeModule
     
     ' ? Modify this to your desired folder (must already exist)
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys"
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
     
     ' Open our four output files

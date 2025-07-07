@@ -26,62 +26,62 @@ Private pLangCode As String
 Public Property Get FileName() As String
     FileName = pFileName
 End Property
-Public Property Let FileName(ByVal value As String)
-    pFileName = value
+Public Property Let FileName(ByVal Value As String)
+    pFileName = Value
 End Property
 
 ' DisplayNameU (unique key)
 Public Property Get DisplayNameU() As String
     DisplayNameU = pDisplayNameU
 End Property
-Public Property Let DisplayNameU(ByVal value As String)
-    pDisplayNameU = value
+Public Property Let DisplayNameU(ByVal Value As String)
+    pDisplayNameU = Value
 End Property
 
 ' DisplayName (human-readable name)
 Public Property Get DisplayName() As String
     DisplayName = pDisplayName
 End Property
-Public Property Let DisplayName(ByVal value As String)
-    pDisplayName = value
+Public Property Let DisplayName(ByVal Value As String)
+    pDisplayName = Value
 End Property
 
 ' ID
 Public Property Get ID() As Long
     ID = pID
 End Property
-Public Property Let ID(ByVal value As Long)
-    pID = value
+Public Property Let ID(ByVal Value As Long)
+    pID = Value
 End Property
 
 ' Width
 Public Property Get Width() As Double
     Width = pWidth
 End Property
-Public Property Let Width(ByVal value As Double)
-    pWidth = value
+Public Property Let Width(ByVal Value As Double)
+    pWidth = Value
 End Property
 
 ' Height
 Public Property Get Height() As Double
     Height = pHeight
 End Property
-Public Property Let Height(ByVal value As Double)
-    pHeight = value
+Public Property Let Height(ByVal Value As Double)
+    pHeight = Value
 End Property
 
 ' Path
 Public Property Get Path() As String
     Path = pPath
 End Property
-Public Property Let Path(ByVal value As String)
-    pPath = value
+Public Property Let Path(ByVal Value As String)
+    pPath = Value
 End Property
 
 ' LangCode
 Public Property Get LangCode() As String
     LangCode = pLangCode
 End Property
-Public Property Let LangCode(ByVal value As String)
-    pLangCode = value
+Public Property Let LangCode(ByVal Value As String)
+    pLangCode = Value
 End Property

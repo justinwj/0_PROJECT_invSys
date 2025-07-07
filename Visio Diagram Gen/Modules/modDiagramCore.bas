@@ -1,5 +1,5 @@
 Attribute VB_Name = "modDiagramCore"
-' clsLayoutAlgorithm
+' modDiagramCore
 Option Explicit
 
 ' Ensure you have two class modules: clsMasterMeta and clsDiagramConfig
@@ -7,44 +7,79 @@ Option Explicit
 ' clsDiagramConfig with public properties: DiagramType, ModuleFilter, ProcFilter, ScaleMode, ExportFormat
 
 ' === Module-level declarations ===
-Private gMasterDict As Object      ' Scripting.Dictionary of clsMasterMeta objects keyed by DisplayNameU
+Public gMasterDict As Object      ' Scripting.Dictionary of clsMasterMeta objects keyed by DisplayNameU
 Private gConfig As clsDiagramConfig
 
 ' === Master metadata infrastructure ===
+'-------------------------------------------------------------------------------
+' Load real metadata from the "StencilMasters" worksheet
+' Builds gMasterDict of clsMasterMeta objects
+'-------------------------------------------------------------------------------
 Public Sub LoadStencilMasterMetadata()
+    On Error Resume Next
+    Call AddRequiredReferences
+    On Error GoTo 0
+
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
     Dim ws As Worksheet
     Dim lastRow As Long, i As Long
     Dim key As String
-    Dim dict As Object
     Dim meta As clsMasterMeta
 
-    ' Initialize dictionary
-    Set dict = CreateObject("Scripting.Dictionary")
-
-    ' Read metadata sheet
     Set ws = ThisWorkbook.Worksheets("StencilMasters")
-    lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
+    lastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
 
     For i = 2 To lastRow
-        key = Trim(CStr(ws.Cells(i, 2).value))
-        If Len(key) > 0 And Not dict.Exists(key) Then
-            Set meta = New clsMasterMeta
-            With meta
-                .FileName = CStr(ws.Cells(i, 1).value)
-                .DisplayNameU = key
-                .DisplayName = CStr(ws.Cells(i, 3).value)
-                .ID = CLng(ws.Cells(i, 4).value)
-                .Width = CDbl(ws.Cells(i, 5).value)
-                .Height = CDbl(ws.Cells(i, 6).value)
-                .Path = CStr(ws.Cells(i, 7).value)
-                .LangCode = CStr(ws.Cells(i, 8).value)
-            End With
-            dict.Add key, meta
+        key = Trim(CStr(ws.Cells(i, 2).Value))
+        If Len(key) > 0 Then
+            If Not dict.Exists(key) Then
+                Set meta = New clsMasterMeta
+                With meta
+                    .FileName = CStr(ws.Cells(i, 1).Value)
+                    .DisplayNameU = key
+                    .DisplayName = CStr(ws.Cells(i, 3).Value)
+                    .ID = CLng(ws.Cells(i, 4).Value)
+                    .Width = CDbl(ws.Cells(i, 5).Value)
+                    .Height = CDbl(ws.Cells(i, 6).Value)
+                    .Path = CStr(ws.Cells(i, 7).Value)
+                    .LangCode = CStr(ws.Cells(i, 8).Value)
+                End With
+                dict.Add key, meta
+            Else
+                Debug.Print "Skipping duplicate key: " & key
+            End If
         End If
     Next i
 
     Set gMasterDict = dict
+    Debug.Print "LoadStencilMasterMetadata: Loaded " & dict.Count & " unique master(s)."
 End Sub
+
+'-------------------------------------------------------------------------------
+' Standard module stub renamed to avoid conflict
+' Place this stub in modDiagramCore for testing purposes
+'-------------------------------------------------------------------------------
+Public Function LoadStencilMasterMetadataStub() As Object
+    Dim dictMasters As Object
+    Set dictMasters = CreateObject("Scripting.Dictionary")
+    
+    ' TODO: Replace with dynamic loading logic
+    Dim meta As clsMasterMeta
+    Set meta = New clsMasterMeta
+    meta.FileName = "Basic_UML.vssx"
+    meta.DisplayNameU = "Basic_UML"
+    meta.DisplayName = "Basic UML Shapes"
+    meta.ID = 1
+    meta.Width = 0
+    meta.Height = 0
+    meta.Path = "C:\Stencils\Basic_UML.vssx"
+    meta.LangCode = "en"
+    dictMasters.Add meta.DisplayNameU, meta
+    
+    Set LoadStencilMasterMetadataStub = dictMasters
+End Function
 
 Public Function GetMasterMetadata(ByVal masterNameU As String) As clsMasterMeta
     If gMasterDict Is Nothing Then LoadStencilMasterMetadata
@@ -57,41 +92,37 @@ Public Function GetMasterMetadata(ByVal masterNameU As String) As clsMasterMeta
 End Function
 
 ' === Configuration loader ===
-Public Sub LoadDiagramConfig()
+' Reads values from the DiagramConfig table into the cfg object
+Public Sub LoadDiagramConfig(ByVal cfg As clsDiagramConfig)
     Dim ws As Worksheet
-    Dim lastRow As Long, r As Long
-    Dim cfg As clsDiagramConfig
-
-    Set cfg = New clsDiagramConfig
-    On Error Resume Next
+    Dim tbl As ListObject
+    Dim rw As ListRow
+    Dim key As String, val As Variant
     Set ws = ThisWorkbook.Worksheets("DiagramConfig")
-    On Error GoTo 0
-    If Not ws Is Nothing Then
-        lastRow = ws.Cells(ws.Rows.count, 1).End(xlUp).Row
-        For r = 2 To lastRow
-            Select Case UCase(Trim(ws.Cells(r, 1).value))
-                Case "DIAGRAMTYPE":    cfg.DiagramType = CStr(ws.Cells(r, 2).value)
-                Case "MODULEFILTER":   cfg.moduleFilter = CStr(ws.Cells(r, 2).value)
-                Case "PROCFILTER":     cfg.procFilter = CStr(ws.Cells(r, 2).value)
-                Case "SCALEMODE":      cfg.ScaleMode = CStr(ws.Cells(r, 2).value)
-                Case "EXPORTFORMAT":   cfg.ExportFormat = CStr(ws.Cells(r, 2).value)
-            End Select
-        Next r
-    Else
-        ' Defaults
-        cfg.DiagramType = "CallGraph"
-        cfg.moduleFilter = "all mods"
-        cfg.procFilter = "all procs"
-        cfg.ScaleMode = "FitToPage"
-        cfg.ExportFormat = "VSDX"
-    End If
-
-    Set gConfig = cfg
+    On Error GoTo ErrHandler
+    Set tbl = ws.ListObjects("DiagramConfig")
+    For Each rw In tbl.ListRows
+        key = UCase(Trim(rw.Range.Cells(1, 1).Value))
+        val = rw.Range.Cells(1, 2).Value
+        Select Case key
+            Case "DIAGRAMTYPE":    cfg.DiagramType = val
+            Case "MODULEFILTER":   If Len(val) > 0 Then cfg.moduleFilter = val
+            Case "PROCFILTER":     If Len(val) > 0 Then cfg.procFilter = val
+            Case "SCALEMODE":      cfg.ScaleMode = val
+            Case "EXPORTFORMAT":   cfg.ExportFormat = val
+        End Select
+    Next rw
+    Exit Sub
+ErrHandler:
+    Debug.Print "Error loading DiagramConfig: ", Err.Description
 End Sub
 
+' Factory function to create and return a populated configuration
 Public Function GetConfig() As clsDiagramConfig
-    If gConfig Is Nothing Then LoadDiagramConfig
-    Set GetConfig = gConfig
+    Dim cfg As clsDiagramConfig
+    Set cfg = New clsDiagramConfig   ' Sets defaults in Class_Initialize
+    LoadDiagramConfig cfg            ' Overwrite with table values
+    Set GetConfig = cfg              ' Return the instance
 End Function
 
 ' === Visio environment setup ===
@@ -101,54 +132,103 @@ Public Sub PrepareVisioEnvironment()
 End Sub
 
 ' === Main orchestrator ===
+' RunDiagramGeneration: full pipeline using config-driven parameters
 Public Sub RunDiagramGeneration()
     Dim cfg As clsDiagramConfig
     Dim items As Collection
     Dim result As Variant
 
+    ' 1) Load user-defined settings
     Set cfg = GetConfig()
+    Debug.Print "[Diagram] Type=" & cfg.DiagramType & _
+                "; ModuleFilter=" & cfg.moduleFilter & _
+                "; ProcFilter=" & cfg.procFilter
 
-    ' 1) Parse and map VBA code to stencil directives
-    ' Use Application.Run to avoid compile errors if modDiagramMaps isn't yet implemented
+    ' 2) Parse and map VBA code to Visio stencil directives
     On Error Resume Next
-    result = Application.Run("modDiagramMaps.ParseAndMap", ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
+    result = Application.Run("modDiagramMaps.ParseAndMap", _
+                             ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
     On Error GoTo 0
-    If IsObject(result) Then
+    If TypeName(result) = "Collection" Then
         Set items = result
     Else
-        ' Fallback to empty collection if mapping not available
         Set items = New Collection
+        Debug.Print "[Diagram] Warning: no mapped items returned."
     End If
 
-    ' 2) Prepare Visio and load master metadata
+    ' 3) Prepare Visio environment and load stencil masters
     PrepareVisioEnvironment
     LoadStencilMasterMetadata
 
-    ' 3) Render items onto the Visio page
-    DrawMappedElements items
+    ' 4) Render mapped items onto the Visio page
+    DrawMappedElements items, cfg.ScaleMode, cfg.ExportFormat
 
-    ' 4) Apply layout and scaling based on configuration
+    ' 5) Post-render: apply additional layout (tiling, fitting, etc.)
     ApplyLayout cfg.ScaleMode
 
-    ' 5) Export diagram to desired format
+    ' 6) Export diagram using configured format
     modDiagramExport.SaveDiagram cfg.ExportFormat
+
+    Debug.Print "[Diagram] Generation complete."
 End Sub
+' Note: Adjust DrawMappedElements signature to accept config args
+' Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As String, ByVal ExportFormat As String)
+'     ' …render shapes, apply ScaleMode settings, ready for export…
+' End Sub
 
-' === Rendering routine ===
-Private Sub DrawMappedElements(ByVal items As Collection)
-    Dim itm As Variant
-    Dim meta As clsMasterMeta
-    Dim shp As Object
+'-------------------------------------------------------------------------------
+' DrawMappedElements
+' Iterates gMasterDict and drops each master on the active Visio page
+'-------------------------------------------------------------------------------
+' DrawMappedElements now drops shapes solely from the opened stencil doc
+' — ensures visApp, visDoc, and visPage are set
+' — opens stencil if not already loaded
+' — handles missing master gracefully
+Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As String, ByVal ExportFormat As String)
+    Dim visApp As Object
+    Dim visDoc As Object
+    Dim visPage As Object
+    Dim stencilDoc As Object
+    Dim masterShape As Object
+    Const stencilName As String = "Basic_U.vssx"
+    Dim item As clsDiagramItem
 
-    For Each itm In items
-        ' itm.DisplayNameU, itm.LabelText, itm.PosX, itm.PosY
-        Set meta = GetMasterMetadata(itm.StencilNameU)
-        Set shp = ActivePage.Drop( _
-            ActiveDocument.Masters.ItemU(meta.DisplayNameU), _
-            itm.PosX, itm.PosY _
-        )
-        shp.Text = itm.LabelText
-    Next itm
+    ' 1) Get or create Visio application
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
+
+    ' 2) Ensure a document and page exist
+    If visApp.Documents.Count = 0 Then visApp.Documents.Add ""
+    Set visDoc = visApp.ActiveDocument
+    If visDoc Is Nothing Then Exit Sub  ' safety check
+    If visDoc.Pages.Count = 0 Then visDoc.Pages.Add
+    Set visPage = visApp.ActivePage
+
+    ' 3) Open stencil for masters if needed
+    On Error Resume Next
+    Set stencilDoc = visApp.Documents(stencilName)
+    If stencilDoc Is Nothing Then
+        Set stencilDoc = visApp.Documents.OpenEx(stencilName, 4)
+    End If
+    On Error GoTo 0
+
+    ' 4) Drop each item
+    For Each item In items
+        Set masterShape = Nothing
+        On Error Resume Next
+        Set masterShape = stencilDoc.Masters(item.StencilNameU)
+        On Error GoTo 0
+        If masterShape Is Nothing Then
+            Debug.Print "[Diagram] Warning: master '" & item.StencilNameU & "' not found in stencil."
+        Else
+            visPage.Drop masterShape, item.PosX, item.PosY
+            visPage.Shapes(visPage.Shapes.Count).Text = item.LabelText
+        End If
+    Next item
+
+    Debug.Print "[Diagram] Dropped " & items.Count & " shapes"
 End Sub
 
 ' === Layout and scaling ===

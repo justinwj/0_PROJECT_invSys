@@ -91,19 +91,19 @@ Public Sub Diag_ListAllStencilMasters()
     Application.DisplayAlerts = True
     On Error GoTo 0
 
-    Set ws = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.count))
+    Set ws = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
     ws.Name = "StencilMasters"
 
     ' Header row
     With ws
-        .Cells(1, 1).value = "Stencil File"
-        .Cells(1, 2).value = "Master NameU"
-        .Cells(1, 3).value = "Master Name"
-        .Cells(1, 4).value = "Master ID"
-        .Cells(1, 5).value = "Width"
-        .Cells(1, 6).value = "Height"
-        .Cells(1, 7).value = "Stencil Path"
-        .Cells(1, 8).value = "LanguageCode"
+        .Cells(1, 1).Value = "Stencil File"
+        .Cells(1, 2).Value = "Master NameU"
+        .Cells(1, 3).Value = "Master Name"
+        .Cells(1, 4).Value = "Master ID"
+        .Cells(1, 5).Value = "Width"
+        .Cells(1, 6).Value = "Height"
+        .Cells(1, 7).Value = "Stencil Path"
+        .Cells(1, 8).Value = "LanguageCode"
     End With
     rowIndex = 2
 
@@ -173,14 +173,14 @@ Private Sub ExtractMastersToSheet(folder As Object, visApp As Object, openFlags 
                     heightVal = masterItem.CellsU("Height").ResultIU
                     On Error GoTo 0
 
-                    ws.Cells(rowIndex, 1).value = fileItem.Name
-                    ws.Cells(rowIndex, 2).value = masterItem.NameU
-                    ws.Cells(rowIndex, 3).value = masterItem.Name
-                    ws.Cells(rowIndex, 4).value = masterItem.ID
-                    ws.Cells(rowIndex, 5).value = widthVal
-                    ws.Cells(rowIndex, 6).value = heightVal
-                    ws.Cells(rowIndex, 7).value = fPath
-                    ws.Cells(rowIndex, 8).value = LangCode
+                    ws.Cells(rowIndex, 1).Value = fileItem.Name
+                    ws.Cells(rowIndex, 2).Value = masterItem.NameU
+                    ws.Cells(rowIndex, 3).Value = masterItem.Name
+                    ws.Cells(rowIndex, 4).Value = masterItem.ID
+                    ws.Cells(rowIndex, 5).Value = widthVal
+                    ws.Cells(rowIndex, 6).Value = heightVal
+                    ws.Cells(rowIndex, 7).Value = fPath
+                    ws.Cells(rowIndex, 8).Value = LangCode
                     rowIndex = rowIndex + 1
                 Next masterItem
                 stencilDoc.Close
