@@ -26,7 +26,7 @@ Sub ExportAllModules()
     Dim fileItem As Object
 
     ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     ' Ensure trailing backslash
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
 
@@ -413,7 +413,7 @@ Public Sub ExportAllCodeToSingleFiles()
     Dim codeMod     As VBIDE.CodeModule
     
     ' ? Modify this to your desired folder (must already exist)
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
     
     ' Open our four output files

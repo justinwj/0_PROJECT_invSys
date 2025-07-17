@@ -125,18 +125,18 @@ Public Property Let DiagramType(ByVal Value As String)
 End Property
 
 ' Property Get/Let for ModuleFilter
-Public Property Get ModuleFilter() As String
-    ModuleFilter = pModuleFilter
+Public Property Get moduleFilter() As String
+    moduleFilter = pModuleFilter
 End Property
-Public Property Let ModuleFilter(ByVal Value As String)
+Public Property Let moduleFilter(ByVal Value As String)
     pModuleFilter = Value
 End Property
 
 ' Property Get/Let for ProcFilter
-Public Property Get ProcFilter() As String
-    ProcFilter = pProcFilter
+Public Property Get procFilter() As String
+    procFilter = pProcFilter
 End Property
-Public Property Let ProcFilter(ByVal Value As String)
+Public Property Let procFilter(ByVal Value As String)
     pProcFilter = Value
 End Property
 
@@ -160,6 +160,7 @@ End Property
 ''''''''''''''''''''''''''''''''''''
 ' Class Module: clsDiagramItem
 ''''''''''''''''''''''''''''''''''''
+' clsDiagramItem
 Option Explicit
 
 ' Class module: clsDiagramItem
@@ -167,11 +168,11 @@ Option Explicit
 
 ' Private backing variables
 Private pStencilNameU As String
-Private pLabelText As String
-Private pPosX As Double
-Private pPosY As Double
+Private pLabelText    As String
+Private pPosX          As Double
+Private pPosY          As Double
 
-' StencilNameU
+' StencilNameU property
 Public Property Get StencilNameU() As String
     StencilNameU = pStencilNameU
 End Property
@@ -179,7 +180,7 @@ Public Property Let StencilNameU(ByVal Value As String)
     pStencilNameU = Value
 End Property
 
-' LabelText
+' LabelText property
 Public Property Get LabelText() As String
     LabelText = pLabelText
 End Property
@@ -187,7 +188,7 @@ Public Property Let LabelText(ByVal Value As String)
     pLabelText = Value
 End Property
 
-' PosX
+' PosX property
 Public Property Get PosX() As Double
     PosX = pPosX
 End Property
@@ -195,14 +196,13 @@ Public Property Let PosX(ByVal Value As Double)
     pPosX = Value
 End Property
 
-' PosY
+' PosY property
 Public Property Get PosY() As Double
     PosY = pPosY
 End Property
 Public Property Let PosY(ByVal Value As Double)
     pPosY = Value
 End Property
-
 
 
 ''''''''''''''''''''''''''''''''''''
@@ -258,6 +258,52 @@ Option Explicit
 ''''''''''''''''''''''''''''''''''''
 ' clsGridLayout
 Option Explicit
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsDiagramConnection
+''''''''''''''''''''''''''''''''''''
+' clsDiagramConnection
+' Represents a connection between two diagram items
+Option Explicit
+
+Private pFromID           As String
+Private pToID             As String
+Private pLabelText        As String
+Private pConnectorMasterU As String
+
+' FromID
+Public Property Get FromID() As String
+    FromID = pFromID
+End Property
+Public Property Let FromID(ByVal Value As String)
+    pFromID = Value
+End Property
+
+' ToID
+Public Property Get ToID() As String
+    ToID = pToID
+End Property
+Public Property Let ToID(ByVal Value As String)
+    pToID = Value
+End Property
+
+' LabelText
+Public Property Get LabelText() As String
+    LabelText = pLabelText
+End Property
+Public Property Let LabelText(ByVal Value As String)
+    pLabelText = Value
+End Property
+
+' ConnectorMasterU
+Public Property Get ConnectorMasterU() As String
+    ConnectorMasterU = pConnectorMasterU
+End Property
+Public Property Let ConnectorMasterU(ByVal Value As String)
+    pConnectorMasterU = Value
+End Property
 
 
 

@@ -244,3 +244,50 @@ Private Sub ApplyLayout(ByVal ScaleMode As String)
     End Select
 End Sub
 
+' clsDiagramConnection stub implementation for modDiagramCore
+' Stub: draws connections between shapes
+' DrawConnections: connects shapes in Visio based on item IDs
+Public Sub DrawConnections(items As Collection, conns As Collection)
+    Dim visApp    As Object
+    Dim visPage   As Object
+    Dim dictShapes As Object
+    Dim item      As clsDiagramItem
+    Dim conn      As clsDiagramConnection
+    Dim shp       As Object
+    Dim shapeFrom As Object
+    Dim shapeTo   As Object
+
+    ' Attach to Visio
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
+    If visApp Is Nothing Then Exit Sub
+
+    ' Use active page
+    Set visPage = visApp.ActivePage
+    If visPage Is Nothing Then Exit Sub
+
+    ' Map item IDs to shapes
+    Set dictShapes = CreateObject("Scripting.Dictionary")
+    For Each item In items
+        On Error Resume Next
+        Set shp = visPage.Shapes(item.LabelText)
+        On Error GoTo 0
+        If Not shp Is Nothing Then dictShapes.Add item.LabelText, shp
+        Set shp = Nothing
+    Next item
+
+    ' AutoConnect shapes
+    For Each conn In conns
+        If dictShapes.Exists(conn.FromID) And dictShapes.Exists(conn.ToID) Then
+            Set shapeFrom = dictShapes(conn.FromID)
+            Set shapeTo = dictShapes(conn.ToID)
+            If Not shapeFrom Is Nothing And Not shapeTo Is Nothing Then
+                shapeFrom.AutoConnect shapeTo, 1   ' visAutoConnectDirNone
+            End If
+        Else
+            Debug.Print "DrawConnections: missing shapes for " & conn.FromID & "?" & conn.ToID
+        End If
+    Next conn
+End Sub

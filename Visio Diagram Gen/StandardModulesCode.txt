@@ -115,14 +115,14 @@ Public Sub LoadDiagramConfig(ByVal cfg As clsDiagramConfig)
     On Error GoTo ErrHandler
     Set tbl = ws.ListObjects("DiagramConfig")
     For Each rw In tbl.ListRows
-        key = Trim(rw.Range.Cells(1, 1).Value)
+        key = UCase(Trim(rw.Range.Cells(1, 1).Value))
         val = rw.Range.Cells(1, 2).Value
         Select Case key
-            Case "DiagramType":   cfg.DiagramType = val
-            Case "ModuleFilter":  cfg.ModuleFilter = val
-            Case "ProcFilter":    cfg.ProcFilter = val
-            Case "ScaleMode":     cfg.ScaleMode = val
-            Case "ExportFormat":  cfg.ExportFormat = val
+            Case "DIAGRAMTYPE":    cfg.DiagramType = val
+            Case "MODULEFILTER":   If Len(val) > 0 Then cfg.moduleFilter = val
+            Case "PROCFILTER":     If Len(val) > 0 Then cfg.procFilter = val
+            Case "SCALEMODE":      cfg.ScaleMode = val
+            Case "EXPORTFORMAT":   cfg.ExportFormat = val
         End Select
     Next rw
     Exit Sub
@@ -154,19 +154,18 @@ Public Sub RunDiagramGeneration()
     ' 1) Load user-defined settings
     Set cfg = GetConfig()
     Debug.Print "[Diagram] Type=" & cfg.DiagramType & _
-                "; ModuleFilter=" & cfg.ModuleFilter & _
-                "; ProcFilter=" & cfg.ProcFilter
+                "; ModuleFilter=" & cfg.moduleFilter & _
+                "; ProcFilter=" & cfg.procFilter
 
     ' 2) Parse and map VBA code to Visio stencil directives
-    '    Use Application.Run to safely call external mapping module
     On Error Resume Next
     result = Application.Run("modDiagramMaps.ParseAndMap", _
-                             ThisWorkbook, cfg.ModuleFilter, cfg.ProcFilter)
+                             ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
     On Error GoTo 0
     If TypeName(result) = "Collection" Then
         Set items = result
     Else
-        Set items = New Collection  ' fallback empty set
+        Set items = New Collection
         Debug.Print "[Diagram] Warning: no mapped items returned."
     End If
 
@@ -175,7 +174,6 @@ Public Sub RunDiagramGeneration()
     LoadStencilMasterMetadata
 
     ' 4) Render mapped items onto the Visio page
-    '    DrawMappedElements signature now includes layout and export args
     DrawMappedElements items, cfg.ScaleMode, cfg.ExportFormat
 
     ' 5) Post-render: apply additional layout (tiling, fitting, etc.)
@@ -186,7 +184,6 @@ Public Sub RunDiagramGeneration()
 
     Debug.Print "[Diagram] Generation complete."
 End Sub
-
 ' Note: Adjust DrawMappedElements signature to accept config args
 ' Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As String, ByVal ExportFormat As String)
 '     ' …render shapes, apply ScaleMode settings, ready for export…
@@ -196,46 +193,55 @@ End Sub
 ' DrawMappedElements
 ' Iterates gMasterDict and drops each master on the active Visio page
 '-------------------------------------------------------------------------------
-Public Sub DrawMappedElements( _
-    ByVal items As Collection, _
-    ByVal ScaleMode As String, _
-    ByVal ExportFormat As String)
-    
-    Dim visApp As Visio.Application
-    Dim visDoc As Visio.Document
-    Dim visPage As Visio.Page
-    Dim master As Visio.master
-    Dim meta As clsMasterMeta
-    Dim key As Variant
+' DrawMappedElements now drops shapes solely from the opened stencil doc
+' — ensures visApp, visDoc, and visPage are set
+' — opens stencil if not already loaded
+' — handles missing master gracefully
+Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As String, ByVal ExportFormat As String)
+    Dim visApp As Object
+    Dim visDoc As Object
+    Dim visPage As Object
+    Dim stencilDoc As Object
+    Dim masterShape As Object
+    Const stencilName As String = "Basic_U.vssx"
+    Dim item As clsDiagramItem
 
+    ' 1) Get or create Visio application
+    On Error Resume Next
     Set visApp = GetObject(, "Visio.Application")
-    If visApp Is Nothing Then
-        MsgBox "Visio is not running.", vbCritical
-        Exit Sub
-    End If
+    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
 
+    ' 2) Ensure a document and page exist
+    If visApp.Documents.Count = 0 Then visApp.Documents.Add ""
     Set visDoc = visApp.ActiveDocument
+    If visDoc Is Nothing Then Exit Sub  ' safety check
+    If visDoc.Pages.Count = 0 Then visDoc.Pages.Add
     Set visPage = visApp.ActivePage
 
-    ' Ensure metadata is loaded
-    If gMasterDict Is Nothing Then LoadStencilMasterMetadata
+    ' 3) Open stencil for masters if needed
+    On Error Resume Next
+    Set stencilDoc = visApp.Documents(stencilName)
+    If stencilDoc Is Nothing Then
+        Set stencilDoc = visApp.Documents.OpenEx(stencilName, 4)
+    End If
+    On Error GoTo 0
 
-    For Each key In gMasterDict.Keys
-        Set meta = gMasterDict(key)
-        ' Open stencil document if not already open
+    ' 4) Drop each item
+    For Each item In items
+        Set masterShape = Nothing
         On Error Resume Next
-        Set master = visApp.Documents(meta.FileName).Masters(meta.DisplayNameU)
-        If master Is Nothing Then
-            Set visDoc = visApp.Documents.OpenEx(meta.Path, visOpenRO)
-            Set master = visDoc.Masters(meta.DisplayNameU)
-        End If
+        Set masterShape = stencilDoc.Masters(item.StencilNameU)
         On Error GoTo 0
+        If masterShape Is Nothing Then
+            Debug.Print "[Diagram] Warning: master '" & item.StencilNameU & "' not found in stencil."
+        Else
+            visPage.Drop masterShape, item.PosX, item.PosY
+            visPage.Shapes(visPage.Shapes.Count).Text = item.LabelText
+        End If
+    Next item
 
-        ' Drop the shape at (0,0) or calculate positions here
-        visPage.Drop master, 0, 0
-    Next key
-
-    MsgBox "Dropped " & gMasterDict.Count & " shape(s).", vbInformation
+    Debug.Print "[Diagram] Dropped " & items.Count & " shapes"
 End Sub
 
 ' === Layout and scaling ===
@@ -251,6 +257,53 @@ Private Sub ApplyLayout(ByVal ScaleMode As String)
     End Select
 End Sub
 
+' clsDiagramConnection stub implementation for modDiagramCore
+' Stub: draws connections between shapes
+' DrawConnections: connects shapes in Visio based on item IDs
+Public Sub DrawConnections(items As Collection, conns As Collection)
+    Dim visApp    As Object
+    Dim visPage   As Object
+    Dim dictShapes As Object
+    Dim item      As clsDiagramItem
+    Dim conn      As clsDiagramConnection
+    Dim shp       As Object
+    Dim shapeFrom As Object
+    Dim shapeTo   As Object
+
+    ' Attach to Visio
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
+    If visApp Is Nothing Then Exit Sub
+
+    ' Use active page
+    Set visPage = visApp.ActivePage
+    If visPage Is Nothing Then Exit Sub
+
+    ' Map item IDs to shapes
+    Set dictShapes = CreateObject("Scripting.Dictionary")
+    For Each item In items
+        On Error Resume Next
+        Set shp = visPage.Shapes(item.LabelText)
+        On Error GoTo 0
+        If Not shp Is Nothing Then dictShapes.Add item.LabelText, shp
+        Set shp = Nothing
+    Next item
+
+    ' AutoConnect shapes
+    For Each conn In conns
+        If dictShapes.Exists(conn.FromID) And dictShapes.Exists(conn.ToID) Then
+            Set shapeFrom = dictShapes(conn.FromID)
+            Set shapeTo = dictShapes(conn.ToID)
+            If Not shapeFrom Is Nothing And Not shapeTo Is Nothing Then
+                shapeFrom.AutoConnect shapeTo, 1   ' visAutoConnectDirNone
+            End If
+        Else
+            Debug.Print "DrawConnections: missing shapes for " & conn.FromID & "?" & conn.ToID
+        End If
+    Next conn
+End Sub
 
 
 ''''''''''''''''''''''''''''''''''''
@@ -465,53 +518,37 @@ Option Explicit
 ' Parses VBA modules and procedures into diagram items
 ' Applies moduleFilter and procFilter, instantiates clsDiagramItem objects,
 ' populates their properties, and returns a Collection of items.
+' Parses VBA project, applies module and procedure filters,
+' and returns a collection of clsDiagramItem for Visio rendering.
 
-Public Function ParseAndMap(wb As Workbook, ModuleFilter As String, ProcFilter As String) As Collection
+' Simplified ParseAndMap stub for testing without VBIDE ProcStartLine dependencies
+Public Function ParseAndMap(wb As Workbook, moduleFilter As String, procFilter As String) As Collection
     Dim items As New Collection
-    Dim vbComp As Object  ' VBIDE.VBComponent
-    Dim codeMod As Object ' VBIDE.CodeModule
-    Dim lineIndex As Long
-    Dim procName As String
-    Dim numLines As Long
+    Dim vbComp As Object  ' Late-bound VBComponent
     Dim item As clsDiagramItem
-    Dim startLine As Long
 
-    ' Ensure VBIDE reference
-    On Error Resume Next
+    ' Loop through components matching moduleFilter
     For Each vbComp In wb.VBProject.VBComponents
-        ' Apply module filter (supports "all mods" wildcard)
-        If LCase(ModuleFilter) = "all mods" Or LCase(vbComp.Name) Like LCase(ModuleFilter) Then
-            Set codeMod = vbComp.CodeModule
-            numLines = codeMod.CountOfLines
-            ' Iterate through all lines to find procedures
-            For lineIndex = 1 To numLines
-                If codeMod.ProcStartLine(codeMod.ProcOfLine(lineIndex, 0), 0) = lineIndex Then
-                    procName = codeMod.ProcOfLine(lineIndex, 0)
-                    ' Apply proc filter (supports "all procs" wildcard)
-                    If LCase(ProcFilter) = "all procs" Or LCase(procName) Like LCase(ProcFilter) Then
-                        ' Instantiate a new diagram item
-                        Set item = New clsDiagramItem
-                        With item
-                            .StencilNameU = vbComp.Name    ' Use module name as stencil key by default
-                            .LabelText = procName
-                            .PosX = 0                      ' TODO: compute X position
-                            .PosY = 0                      ' TODO: compute Y position
-                        End With
-                        items.Add item
-                    End If
-                    ' Skip to end of this procedure to avoid duplicates
-                    startLine = codeMod.ProcStartLine(procName, 0) + _
-                                codeMod.ProcCountLines(procName, 0)
-                    lineIndex = startLine
-                End If
-            Next lineIndex
+        If vbComp.Name Like moduleFilter Then
+            ' Create a diagram item per module for stub
+            Set item = New clsDiagramItem
+            item.StencilNameU = "Rectangle"    ' default shape
+            item.LabelText = vbComp.Name
+            item.PosX = items.Count * 1#          ' simple horizontal layout
+            item.PosY = 0#
+            items.Add item
         End If
     Next vbComp
-    On Error GoTo 0
 
+    ' Return collection of diagram items
     Set ParseAndMap = items
 End Function
 
+'===== Notes on update =====
+' • Removed ProcStartLine/ProcCountLines usage to avoid VBIDE dependencies.
+' • Now creates one item per VBComponent matching moduleFilter.
+' • This stub ensures ParseAndMap compiles and runs regardless of VBIDE reference.
+' • Replace with full implementation when ready to handle procedures and code scanning.
 
 
 
@@ -541,16 +578,190 @@ Option Explicit
 ''''''''''''''''''''''''''''''''''''
 ' modTests
 Option Explicit
+
+
+' clsDiagramConnection
+Public Sub TestDrawConnections()
+    Dim items As New Collection
+    Dim conns As New Collection
+    Dim it As clsDiagramItem
+    Dim connObj As clsDiagramConnection
+    Dim visApp As Object
+    Dim visDoc As Object
+    Dim visPage As Object
+    Dim rectMaster As Object
+    Dim stencil As Object
+    Dim shp As Object
+
+    ' Initialize Visio
+    On Error Resume Next
+    Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
+    If visApp Is Nothing Then
+        MsgBox "Visio not available.", vbCritical
+        Exit Sub
+    End If
+    visApp.Visible = True
+
+    ' Create a new Visio document
+    Set visDoc = visApp.Documents.Add("")
+    If visDoc Is Nothing Then
+        MsgBox "Unable to create a Visio document.", vbCritical
+        Exit Sub
+    End If
+
+    ' Ensure at least one page exists
+    If visDoc.Pages.Count = 0 Then visDoc.Pages.Add
+    Set visPage = visDoc.Pages(1)
+
+    ' Open Basic Shapes stencil to get Rectangle master
+    On Error Resume Next
+    Set stencil = visApp.Documents.OpenEx("Basic Shapes.vssx", 64)
+    If stencil Is Nothing Then Set stencil = visApp.Documents.OpenEx("Basic Shapes.vss", 64)
+    On Error GoTo 0
+    If stencil Is Nothing Then
+        MsgBox "Unable to open Basic Shapes stencil.", vbCritical
+        Exit Sub
+    End If
+    Set rectMaster = stencil.Masters("Rectangle")
+    If rectMaster Is Nothing Then
+        MsgBox "Master 'Rectangle' not found in stencil.", vbCritical
+        Exit Sub
+    End If
+
+    ' Prepare test items
+    Set it = New clsDiagramItem: it.LabelText = "A": it.PosX = 1: it.PosY = 5: items.Add it
+    Set it = New clsDiagramItem: it.LabelText = "B": it.PosX = 3: it.PosY = 5: items.Add it
+
+    ' Drop shapes on new drawing
+    For Each it In items
+        Set shp = visPage.Drop(rectMaster, it.PosX, it.PosY)
+        shp.Text = it.LabelText
+        shp.NameU = it.LabelText
+    Next it
+
+    ' Draw connection between shapes
+    Set connObj = New clsDiagramConnection
+    connObj.FromID = "A": connObj.ToID = "B": conns.Add connObj
+    DrawConnections items, conns
+
+    MsgBox "Diagram generated successfully.", vbInformation
+End Sub
+
+' PASSED TESTS clsDiagramItem
+' Stub for testing mapping: returns a test collection of clsDiagramItem instances
+Public Function TestParseAndMap(wb As Workbook, moduleFilter As String, procFilter As String) As Collection
+    Dim items As New Collection
+    Dim it As clsDiagramItem
+
+    ' Example test nodes
+    Set it = New clsDiagramItem
+    it.StencilNameU = "Ellipse"
+    it.LabelText = "Node A"
+    it.PosX = 1#
+    it.PosY = 1#
+    items.Add it
+
+    Set it = New clsDiagramItem
+    it.StencilNameU = "Diamond"
+    it.LabelText = "Node B"
+    it.PosX = 4#
+    it.PosY = 2#
+    items.Add it
+
+    Set TestParseAndMap = items
+End Function
+
+' Wrapper to test the TestParseAndMap stub in modDiagramMaps.bas
+Public Sub TestRunParseAndMap()
+    Dim items As Collection
+
+    ' 1) Invoke real ParseAndMap implementation
+    Set items = ParseAndMap(ThisWorkbook, "*", "*")
+    Debug.Print "[Test] Parsed items count: " & items.Count
+
+    ' 2) Prepare Visio and load stencil metadata
+    PrepareVisioEnvironment
+    LoadStencilMasterMetadata
+
+    ' 3) Render parsed items using existing draw routine
+    DrawMappedElements items, "FitToPage", "PNG"
+    Debug.Print "[Test] Rendered parsed items"
+End Sub
+
+'===== Additional helper: list stencil master names =====
+' Run this test to print the first 50 master names from the opened stencil
+Public Sub TestListStencilMasters()
+    Dim stencilDoc As Object
+    Dim visApp As Object
+    Dim m As Object
+    Dim i As Long
+    Const stencilName As String = "Basic_U.vssx"
+
+    ' Attach to Visio and ensure stencil loaded
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    On Error GoTo 0
+    Set stencilDoc = visApp.Documents(stencilName)
+    If stencilDoc Is Nothing Then Set stencilDoc = visApp.Documents.OpenEx(stencilName, 4)
+
+    ' List master names
+    Debug.Print "Listing first 50 masters in " & stencilName
+    i = 0
+    For Each m In stencilDoc.Masters
+        Debug.Print "  [" & m.Name & "]"
+        i = i + 1
+        If i >= 50 Then Exit For
+    Next m
+End Sub
+' Stub to test rendering a single clsDiagramItem
+Public Sub TestDrawSingleItem()
+    Dim item As clsDiagramItem
+    Dim items As Collection
+
+    ' Prepare environment and stencils
+    PrepareVisioEnvironment
+    LoadStencilMasterMetadata
+
+    ' Configure one diagram item (adjust name to match stencil master exactly)
+    Set item = New clsDiagramItem
+    item.StencilNameU = "Rectangle"   ' use a valid master name from the stencil   ' use exact master name from stencil (no extension)
+    item.LabelText = "Test Node"
+    item.PosX = 2#
+    item.PosY = 3#
+
+    ' Collect and render
+    Set items = New Collection
+    items.Add item
+    DrawMappedElements items, "FitToPage", "PNG"
+
+    Debug.Print "Rendered single test item: " & item.StencilNameU
+End Sub
+
+' PASSED TEST
 ' clsDiagramConfig
 ' Smoke test to verify config loading only
 Public Sub TestLoadConfig()
+    Dim ws As Worksheet
+    Dim tbl As ListObject
+    Dim rw As ListRow
+
+    Set ws = ThisWorkbook.Worksheets("DiagramConfig")
+    Set tbl = ws.ListObjects("DiagramConfig")
+    
     Dim cfg As clsDiagramConfig
     Set cfg = GetConfig()
     Debug.Print "Type:    ", cfg.DiagramType
-    Debug.Print "ModFil:  ", cfg.ModuleFilter
-    Debug.Print "PrFil:   ", cfg.ProcFilter
+    Debug.Print "ModFil:  ", cfg.moduleFilter
+    Debug.Print "PrFil:   ", cfg.procFilter
     Debug.Print "Scale:   ", cfg.ScaleMode
     Debug.Print "ExpFmt:  ", cfg.ExportFormat
+    Debug.Print "Table found: " & tbl.Name
+    For Each rw In tbl.ListRows
+        Debug.Print "Row: " & rw.Range.Cells(1, 1).Value & " = " & rw.Range.Cells(1, 2).Value
+    Next rw
+
 End Sub
 
 ' PASSED TESTS clsMasterMeta
@@ -652,7 +863,7 @@ Sub ExportAllModules()
     Dim fileItem As Object
 
     ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     ' Ensure trailing backslash
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
 
@@ -1039,7 +1250,7 @@ Public Sub ExportAllCodeToSingleFiles()
     Dim codeMod     As VBIDE.CodeModule
     
     ' ? Modify this to your desired folder (must already exist)
-    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
     
     ' Open our four output files
