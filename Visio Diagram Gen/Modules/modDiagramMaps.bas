@@ -2,6 +2,8 @@ Attribute VB_Name = "modDiagramMaps"
 ' modDiagramMaps
 Option Explicit
 
+' Holds registered providers
+Private providersCollection As Collection
 ' Module: modDiagramMaps
 ' Parses VBA modules and procedures into diagram items
 ' Applies moduleFilter and procFilter, instantiates clsDiagramItem objects,
@@ -38,4 +40,42 @@ End Function
 ' • This stub ensures ParseAndMap compiles and runs regardless of VBIDE reference.
 ' • Replace with full implementation when ready to handle procedures and code scanning.
 
+' Purpose: Registry for clsMapProvider implementations
+' Register a map provider (accepts any object implementing GetItems)
+Public Sub RegisterProvider(ByVal provider As Object)
+    If providersCollection Is Nothing Then Set providersCollection = New Collection
+    providersCollection.Add provider
+End Sub
 
+' Get the collection of registered providers
+Public Function GetRegisteredProviders() As Collection
+    If providersCollection Is Nothing Then Set providersCollection = New Collection
+    Set GetRegisteredProviders = providersCollection
+End Function
+
+' Execute all providers against the workbook and config, aggregating items
+Public Function ExecuteProviders(ByVal wb As Workbook, _
+                                 ByVal cfg As clsDiagramConfig) As Collection
+    Dim allItems As New Collection
+    Dim prov As Object
+    Dim items As Collection
+    Dim itm As Variant
+
+    For Each prov In GetRegisteredProviders()
+        On Error Resume Next
+        Set items = prov.GetItems(wb, cfg)
+        On Error GoTo 0
+        If Not items Is Nothing Then
+            For Each itm In items
+                allItems.Add itm
+            Next itm
+        End If
+    Next prov
+
+    Set ExecuteProviders = allItems
+End Function
+
+' Clear all registered providers (for re-initialization)
+Public Sub ClearProviders()
+    Set providersCollection = Nothing
+End Sub

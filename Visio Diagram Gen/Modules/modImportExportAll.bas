@@ -26,7 +26,7 @@ Sub ExportAllModules()
     Dim fileItem As Object
 
     ' Root folder path; ensure subfolders "Sheets", "Forms", "Modules", and "Class Modules" exist.
-    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     ' Ensure trailing backslash
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
 
@@ -342,7 +342,7 @@ Sub ExportTablesHeadersAndControls()
             On Error GoTo 0
         Next ole
         ' ? Forms Controls ?
-        For Each shp In ws.Shapes
+        For Each shp In ws.shapes
             If shp.Type = msoFormControl Then
                 ctrlType = shp.FormControlType
                 Select Case ctrlType
@@ -413,7 +413,7 @@ Public Sub ExportAllCodeToSingleFiles()
     Dim codeMod     As VBIDE.CodeModule
     
     ' ? Modify this to your desired folder (must already exist)
-    exportPath = "C:\Users\justu\Documents\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
+    exportPath = "D:\justinwj\Workbooks\0_PROJECT_invSys\Visio Diagram Gen"
     If Right(exportPath, 1) <> "\" Then exportPath = exportPath & "\"
     
     ' Open our four output files

@@ -9,13 +9,94 @@ Option Explicit
 ' === Module-level declarations ===
 Public gMasterDict As Object      ' Scripting.Dictionary of clsMasterMeta objects keyed by DisplayNameU
 Private gConfig As clsDiagramConfig
+' Module-level globals
+Private gVisioApp As Visio.application
+Private gWorkbook As Workbook
+Private gShapeProvider As clsShapeProvider
+
+' Initialize core services: Visio app, workbook, config, and shape providers
+Public Sub Initialize(ByVal visApp As Visio.application, _
+                      ByVal wb As Workbook, _
+                      ByVal cfg As clsDiagramConfig)
+    Set gVisioApp = visApp
+    Set gWorkbook = wb
+    Set gConfig = cfg
+
+    ' Initialize the shape provider
+    Set gShapeProvider = New clsShapeProvider
+    gShapeProvider.Initialize gVisioApp
+
+    ' Register map providers
+    modDiagramMaps.ClearProviders
+    Dim prov As Object
+    Set prov = New clsCallSiteMapProvider
+    modDiagramMaps.RegisterProvider prov
+End Sub
+
+' Accessor for Visio.Application
+Public Property Get VisioApp() As Visio.application
+    Set VisioApp = gVisioApp
+End Property
+
+' Accessor for Workbook context
+Public Property Get Workbook() As Workbook
+    Set Workbook = gWorkbook
+End Property
+
+' Accessor for DiagramConfig
+Public Property Get Config() As clsDiagramConfig
+    Set Config = gConfig
+End Property
+
+' Accessor for ShapeProvider
+Public Property Get ShapeProvider() As clsShapeProvider
+    Set ShapeProvider = gShapeProvider
+End Property
+
+Public Sub Generate()
+    Dim shapes     As Collection
+    Dim layoutAlg As clsLayoutAlgorithm
+    Dim shapedDict As Scripting.Dictionary
+    Dim connectors As Collection
+    Dim drawingDoc As Visio.Document
+    Dim pg         As Visio.page
+    Dim builder    As clsDiagramBuilder
+
+    ' 1) Gather shape items using gConfig
+    Set shapes = modDiagramMaps.ExecuteProviders(gWorkbook, gConfig)
+    '                                   ? gConfig, not cfg        :contentReference[oaicite:0]{index=0}
+
+    ' 2) Layout them
+    Set layoutAlg = New clsVerticalLayoutAlgorithm
+    Set shapes = layoutAlg.Layout(shapes, gConfig) ' :contentReference[oaicite:1]{index=1}
+
+    ' 3) New Visio page
+    Set drawingDoc = gVisioApp.Documents.Add("")
+    Set pg = drawingDoc.Pages(1)
+
+    ' 4) Draw shapes
+    Set builder = New clsDiagramBuilder
+    builder.Initialize gVisioApp, pg
+    Set shapedDict = builder.DrawItems(shapes, gShapeProvider)
+
+    ' 5) (Stub) connectors
+    Set connectors = New Collection
+    If connectors.Count > 0 Then
+        builder.DrawConnections connectors, shapedDict
+    Else
+        Debug.Print "No connectors to draw"
+    End If
+
+    Debug.Print "Generate: completed " & shapes.Count & " shapes and " & connectors.Count & " connectors."
+End Sub
 
 ' === Master metadata infrastructure ===
 '-------------------------------------------------------------------------------
 ' Load real metadata from the "StencilMasters" worksheet
 ' Builds gMasterDict of clsMasterMeta objects
 '-------------------------------------------------------------------------------
-Public Sub LoadStencilMasterMetadata()
+' Version one: load metadata from the "StencilMasters" sheet
+Public Sub LoadStencilMasterMetadataFromWorksheet()
     On Error Resume Next
     Call AddRequiredReferences
     On Error GoTo 0
@@ -54,35 +135,11 @@ Public Sub LoadStencilMasterMetadata()
     Next i
 
     Set gMasterDict = dict
-    Debug.Print "LoadStencilMasterMetadata: Loaded " & dict.Count & " unique master(s)."
+    Debug.Print "LoadStencilMasterMetadataFromWorksheet: Loaded " & dict.Count & " unique master(s)."
 End Sub
 
-'-------------------------------------------------------------------------------
-' Standard module stub renamed to avoid conflict
-' Place this stub in modDiagramCore for testing purposes
-'-------------------------------------------------------------------------------
-Public Function LoadStencilMasterMetadataStub() As Object
-    Dim dictMasters As Object
-    Set dictMasters = CreateObject("Scripting.Dictionary")
-    
-    ' TODO: Replace with dynamic loading logic
-    Dim meta As clsMasterMeta
-    Set meta = New clsMasterMeta
-    meta.FileName = "Basic_UML.vssx"
-    meta.DisplayNameU = "Basic_UML"
-    meta.DisplayName = "Basic UML Shapes"
-    meta.ID = 1
-    meta.Width = 0
-    meta.Height = 0
-    meta.Path = "C:\Stencils\Basic_UML.vssx"
-    meta.LangCode = "en"
-    dictMasters.Add meta.DisplayNameU, meta
-    
-    Set LoadStencilMasterMetadataStub = dictMasters
-End Function
-
 Public Function GetMasterMetadata(ByVal masterNameU As String) As clsMasterMeta
-    If gMasterDict Is Nothing Then LoadStencilMasterMetadata
+    If gMasterDict Is Nothing Then LoadStencilMasterMetadataFromWorksheet
     If gMasterDict.Exists(masterNameU) Then
         Set GetMasterMetadata = gMasterDict(masterNameU)
     Else
@@ -146,7 +203,7 @@ Public Sub RunDiagramGeneration()
 
     ' 2) Parse and map VBA code to Visio stencil directives
     On Error Resume Next
-    result = Application.Run("modDiagramMaps.ParseAndMap", _
+    result = application.Run("modDiagramMaps.ParseAndMap", _
                              ThisWorkbook, cfg.moduleFilter, cfg.procFilter)
     On Error GoTo 0
     If TypeName(result) = "Collection" Then
@@ -158,7 +215,7 @@ Public Sub RunDiagramGeneration()
 
     ' 3) Prepare Visio environment and load stencil masters
     PrepareVisioEnvironment
-    LoadStencilMasterMetadata
+    LoadStencilMasterMetadataFromWorksheet
 
     ' 4) Render mapped items onto the Visio page
     DrawMappedElements items, cfg.ScaleMode, cfg.ExportFormat
@@ -224,7 +281,7 @@ Public Sub DrawMappedElements(ByVal items As Collection, ByVal ScaleMode As Stri
             Debug.Print "[Diagram] Warning: master '" & item.StencilNameU & "' not found in stencil."
         Else
             visPage.Drop masterShape, item.PosX, item.PosY
-            visPage.Shapes(visPage.Shapes.Count).Text = item.LabelText
+            visPage.shapes(visPage.shapes.Count).Text = item.LabelText
         End If
     Next item
 
@@ -244,50 +301,75 @@ Private Sub ApplyLayout(ByVal ScaleMode As String)
     End Select
 End Sub
 
-' clsDiagramConnection stub implementation for modDiagramCore
-' Stub: draws connections between shapes
-' DrawConnections: connects shapes in Visio based on item IDs
-Public Sub DrawConnections(items As Collection, conns As Collection)
-    Dim visApp    As Object
-    Dim visPage   As Object
-    Dim dictShapes As Object
-    Dim item      As clsDiagramItem
-    Dim conn      As clsDiagramConnection
-    Dim shp       As Object
-    Dim shapeFrom As Object
-    Dim shapeTo   As Object
+'--- Stub for loading metadata in modDiagramCore ---
+' Version two: stub for testing via clsShapeProvider, with guaranteed active document/page
+Public Function LoadStencilMasterMetadata(ByVal provider As clsShapeProvider, _
+                                         ByVal stencilPath As String, _
+                                         ByVal masterNameU As String) As clsMasterMeta
+    Dim meta As clsMasterMeta
+    Dim m As Visio.master
+    Dim app As Visio.application
+    Dim visDoc As Visio.Document
+    Dim pg As Visio.page
+    Dim shp As Visio.Shape
+    Set meta = New clsMasterMeta
 
-    ' Attach to Visio
+    ' Retrieve Visio.Master and metadata
+    Set m = provider.GetMaster(stencilPath, masterNameU)
+    Set app = m.Document.application
+
+    ' Ensure at least one document is open
+    If app.Documents.Count = 0 Then
+        Set visDoc = app.Documents.Add("")
+    Else
+        Set visDoc = app.ActiveDocument
+    End If
+
+    ' Ensure at least one page exists
+    If visDoc.Pages.Count = 0 Then visDoc.Pages.Add
+    Set pg = visDoc.Pages(1)   ' Use the first page explicitly
+
+    ' Populate metadata properties
+    meta.FileName = stencilPath
+    meta.DisplayNameU = masterNameU
+    meta.DisplayName = masterNameU
+    meta.ID = m.ID
+
+    ' Drop the shape and capture size
+    On Error Resume Next
+    Set shp = pg.Drop(m, 0, 0)
+    If Not shp Is Nothing Then
+        meta.Width = shp.CellsU("Width").ResultIU
+        meta.Height = shp.CellsU("Height").ResultIU
+        shp.Delete
+    End If
+    On Error GoTo 0
+
+    meta.Path = stencilPath
+
+    Set LoadStencilMasterMetadata = meta
+End Function
+
+'--- Test harness for full pipeline ---
+Public Sub TestGenerate()
+    Dim visApp As Visio.application
     On Error Resume Next
     Set visApp = GetObject(, "Visio.Application")
-    If visApp Is Nothing Then Set visApp = CreateObject("Visio.Application")
+    If visApp Is Nothing Then Set visApp = New Visio.application
     On Error GoTo 0
-    If visApp Is Nothing Then Exit Sub
 
-    ' Use active page
-    Set visPage = visApp.ActivePage
-    If visPage Is Nothing Then Exit Sub
+    Dim cfg As clsDiagramConfig
+    Set cfg = New clsDiagramConfig
+    ' Optional: customize start point and spacing
+    cfg.OriginX = 2
+    cfg.OriginY = 8
+    cfg.VerticalSpacing = 1.5
 
-    ' Map item IDs to shapes
-    Set dictShapes = CreateObject("Scripting.Dictionary")
-    For Each item In items
-        On Error Resume Next
-        Set shp = visPage.Shapes(item.LabelText)
-        On Error GoTo 0
-        If Not shp Is Nothing Then dictShapes.Add item.LabelText, shp
-        Set shp = Nothing
-    Next item
+    ' Initialize and run
+    Initialize visApp, ThisWorkbook, cfg
+    Generate
 
-    ' AutoConnect shapes
-    For Each conn In conns
-        If dictShapes.Exists(conn.FromID) And dictShapes.Exists(conn.ToID) Then
-            Set shapeFrom = dictShapes(conn.FromID)
-            Set shapeTo = dictShapes(conn.ToID)
-            If Not shapeFrom Is Nothing And Not shapeTo Is Nothing Then
-                shapeFrom.AutoConnect shapeTo, 1   ' visAutoConnectDirNone
-            End If
-        Else
-            Debug.Print "DrawConnections: missing shapes for " & conn.FromID & "?" & conn.ToID
-        End If
-    Next conn
+    ' Report results
+    Debug.Print "TestGenerate: Completed pipeline"
+    Debug.Print "Shapes on page: " & visApp.ActivePage.shapes.Count
 End Sub

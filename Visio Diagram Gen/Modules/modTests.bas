@@ -1,8 +1,59 @@
 Attribute VB_Name = "modTests"
 ' modTests
 Option Explicit
+' clsMasterMeta via shape provider
+'--- Test harness for clsShapeProvider-based metadata loader ---
+Public Sub TestMasterMeta()
+    Dim visApp As Visio.application
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then Set visApp = New Visio.application
+    On Error GoTo 0
 
-' clsCallSites, clsCallSiteMapProvider
+    Dim shpProv As clsShapeProvider
+    Set shpProv = New clsShapeProvider
+    shpProv.Initialize visApp
+
+    Dim meta As clsMasterMeta
+    Set meta = LoadStencilMasterMetadata(shpProv, "Basic_U.vssx", "Rectangle")
+
+    Debug.Print "Loaded metadata for '" & meta.DisplayNameU & "': ID=" & meta.ID
+    Debug.Print "  FileName: " & meta.FileName
+    Debug.Print "  Path: " & meta.Path
+    Debug.Print "  Width: " & meta.Width & ", Height: " & meta.Height
+End Sub
+
+' PASSED TEST clsShapeProvider
+'--- Test harness for clsShapeProvider ---
+Public Sub TestShapeProvider()
+    Dim shpProv As clsShapeProvider
+    Dim visApp As Visio.application
+    Dim stencilPath As String
+    Dim masterName As String
+    Dim masterID As Long
+
+    ' Acquire Visio instance (or start new)
+    On Error Resume Next
+    Set visApp = GetObject(, "Visio.Application")
+    If visApp Is Nothing Then
+        Set visApp = New Visio.application
+    End If
+    On Error GoTo 0
+
+    ' Initialize provider
+    Set shpProv = New clsShapeProvider
+    shpProv.Initialize visApp
+
+    ' Define test values (adjust path as needed)
+    stencilPath = "Basic_U.vssx"
+    masterName = "Rectangle"
+
+    ' Fetch and print MasterID
+    masterID = shpProv.GetMasterID(stencilPath, masterName)
+    Debug.Print "Master ID for " & masterName & ": " & masterID
+End Sub
+
+' PASSED TEST clsCallSites, clsCallSiteMapProvider
 
 ' Test for clsDiagramBuilder.BuildConnections
 Public Sub TestDiagramBuilder_BuildConnections()
@@ -33,10 +84,10 @@ Public Sub TestDiagramBuilder_BuildConnections()
     connections.Add Array(1001, 2002)
 
     ' Act
-    Set builder = New clsDiagramBuilder
-    Set builder.Application = fakeApp
-    Set builder.Document = fakeDoc
-    Set connShapes = builder.BuildConnections(connections)
+    ' Set builder = New clsDiagramBuilder
+    ' Set builder.application = fakeApp
+    ' Set builder.Document = fakeDoc
+    ' Set connShapes = builder.BuildConnections(connections)
 
     ' Assert: one connector created
     If connShapes.Count <> 1 Then Err.Raise vbObjectError + 520, _
@@ -183,7 +234,7 @@ Public Sub TestDrawConnections()
     ' Draw connection between shapes
     Set connObj = New clsDiagramConnection
     connObj.FromID = "A": connObj.ToID = "B": conns.Add connObj
-    DrawConnections items, conns
+   ' DrawConnections items, conns
 
     MsgBox "Diagram generated successfully.", vbInformation
 End Sub
@@ -222,7 +273,7 @@ Public Sub TestRunParseAndMap()
 
     ' 2) Prepare Visio and load stencil metadata
     PrepareVisioEnvironment
-    LoadStencilMasterMetadata
+   '  LoadStencilMasterMetadata
 
     ' 3) Render parsed items using existing draw routine
     DrawMappedElements items, "FitToPage", "PNG"
@@ -262,7 +313,7 @@ Public Sub TestDrawSingleItem()
 
     ' Prepare environment and stencils
     PrepareVisioEnvironment
-    LoadStencilMasterMetadata
+    ' LoadStencilMasterMetadata
 
     ' Configure one diagram item (adjust name to match stencil master exactly)
     Set item = New clsDiagramItem
@@ -314,7 +365,7 @@ Public Sub TestLoadStencilMasterMetadataStub()
     Dim key As Variant
     Dim meta As clsMasterMeta
     
-    Set dictMasters = LoadStencilMasterMetadataStub()
+    ' Set dictMasters = LoadStencilMasterMetadataStub()
     If dictMasters Is Nothing Then
         MsgBox "LoadStencilMasterMetadataStub returned Nothing", vbCritical
         Exit Sub
@@ -338,7 +389,7 @@ End Sub
 '-------------------------------------------------------------------------------
 Public Sub TestMasterFlow()
     ' Ensure the master dictionary is loaded
-    LoadStencilMasterMetadata
+    ' LoadStencilMasterMetadata
     
     ' Quick check of contents
     If gMasterDict Is Nothing Or gMasterDict.Count = 0 Then

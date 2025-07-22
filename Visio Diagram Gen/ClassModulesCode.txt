@@ -5,6 +5,49 @@
 ' Class data for modDiagramCore
 Option Explicit
 
+Private pCallerModule As String
+Private pCallerProc   As String
+Private pCalleeModule As String
+Private pCalleeProc   As String
+
+' CallerModule property
+Public Property Get CallerModule() As String
+    CallerModule = pCallerModule
+End Property
+Public Property Let CallerModule(ByVal val As String)
+    pCallerModule = val
+End Property
+
+' CallerProc property
+Public Property Get CallerProc() As String
+    CallerProc = pCallerProc
+End Property
+Public Property Let CallerProc(ByVal val As String)
+    pCallerProc = val
+End Property
+
+' CalleeModule property
+Public Property Get CalleeModule() As String
+    CalleeModule = pCalleeModule
+End Property
+Public Property Let CalleeModule(ByVal val As String)
+    pCalleeModule = val
+End Property
+
+' CalleeProc property
+Public Property Get CalleeProc() As String
+    CalleeProc = pCalleeProc
+End Property
+Public Property Let CalleeProc(ByVal val As String)
+    pCalleeProc = val
+End Property
+
+' Returns a unique identifier for this call-site
+Public Function GetID() As String
+    GetID = pCallerModule & "." & pCallerProc & "->" & _
+            pCalleeModule & "." & pCalleeProc
+End Function
+
 
 
 
@@ -106,6 +149,9 @@ Private pModuleFilter  As String
 Private pProcFilter    As String
 Private pScaleMode     As String
 Private pExportFormat  As String
+Private pOriginX As Double
+Private pOriginY As Double
+Private pVerticalSpacing As Double
 
 ' Initialize default values when class is created
 Private Sub Class_Initialize()
@@ -114,6 +160,9 @@ Private Sub Class_Initialize()
     pProcFilter = "*"
     pScaleMode = "FitToPage"
     pExportFormat = "PNG"
+    pOriginX = 0          ' Default X origin
+    pOriginY = 0          ' Default Y origin (top)
+    pVerticalSpacing = 1  ' Default spacing between items
 End Sub
 
 ' Property Get/Let for DiagramType
@@ -156,6 +205,33 @@ Public Property Let ExportFormat(ByVal Value As String)
     pExportFormat = Value
 End Property
 
+'--- OriginX property ---
+Public Property Get OriginX() As Double
+    OriginX = pOriginX
+End Property
+
+Public Property Let OriginX(ByVal val As Double)
+    pOriginX = val
+End Property
+
+'--- OriginY property ---
+Public Property Get OriginY() As Double
+    OriginY = pOriginY
+End Property
+
+Public Property Let OriginY(ByVal val As Double)
+    pOriginY = val
+End Property
+
+'--- VerticalSpacing property ---
+Public Property Get VerticalSpacing() As Double
+    VerticalSpacing = pVerticalSpacing
+End Property
+
+Public Property Let VerticalSpacing(ByVal val As Double)
+    pVerticalSpacing = val
+End Property
+
 
 ''''''''''''''''''''''''''''''''''''
 ' Class Module: clsDiagramItem
@@ -169,6 +245,8 @@ Option Explicit
 ' Private backing variables
 Private pStencilNameU As String
 Private pLabelText    As String
+Private pMeta As clsMasterMeta
+Private pShape As Visio.Shape
 Private pPosX          As Double
 Private pPosY          As Double
 
@@ -188,6 +266,24 @@ Public Property Let LabelText(ByVal Value As String)
     pLabelText = Value
 End Property
 
+'--- Meta Property ---
+Public Property Get meta() As clsMasterMeta
+    Set meta = pMeta
+End Property
+
+Public Property Set meta(ByVal val As clsMasterMeta)
+    Set pMeta = val
+End Property
+
+'--- Shape Property (read-only) ---
+Public Property Get Shape() As Visio.Shape
+    Set Shape = pShape
+End Property
+
+Private Property Set Shape(ByVal val As Visio.Shape)
+    Set pShape = val
+End Property
+
 ' PosX property
 Public Property Get PosX() As Double
     PosX = pPosX
@@ -204,6 +300,13 @@ Public Property Let PosY(ByVal Value As Double)
     pPosY = Value
 End Property
 
+'--- Draws this item onto the specified page using the shape provider ---
+Public Sub Draw(ByVal pg As Visio.page, ByVal shapeProv As clsShapeProvider)
+    Dim m As Visio.master
+    Set m = shapeProv.GetMaster(pMeta.Path, pMeta.DisplayNameU)
+    Set pShape = pg.Drop(m, pPosX, pPosY)
+End Sub
+
 
 ''''''''''''''''''''''''''''''''''''
 ' Class Module: clsDiagramItemCollection
@@ -217,7 +320,21 @@ Option Explicit
 ' Class Module: clsMapProvider
 ''''''''''''''''''''''''''''''''''''
 ' clsMapProvider
+' Class: clsMapProvider
+' Purpose: Base interface for all diagram map providers.
+'          Providers scan a source (e.g., VBA modules) and produce a collection of clsDiagramItem.
 Option Explicit
+' Note: Concrete subclasses must implement GetItems.
+Public Function GetItems(ByVal wb As Workbook, ByVal cfg As clsDiagramConfig) As Collection
+    ' Return a Collection of clsDiagramItem objects
+    Err.Raise vbObjectError + 2000, "clsMapProvider", _
+              "GetItems must be implemented by concrete map providers."
+End Function
+
+' Optional: Allows a provider to register itself with a central registry
+' Public Sub Register()
+'     modDiagramMaps.RegisterProvider Me
+' End Sub
 
 
 
@@ -225,15 +342,88 @@ Option Explicit
 ' Class Module: clsLayoutAlgorithm
 ''''''''''''''''''''''''''''''''''''
 ' clsLayoutAlgorithm
+' defines what a layout algorithm must do (e.g. expose a Layout(items, cfg) As Collection method).
 Option Explicit
 
+'=== Class: clsLayoutAlgorithm (interface)
+
+' Defines the contract for layout algorithms
+Public Function Layout(ByVal items As Collection, _
+                       ByVal cfg As clsDiagramConfig) As Collection
+    Err.Raise vbObjectError + 3000, "clsLayoutAlgorithm", _
+              "Layout must be implemented by concrete algorithms."
+End Function
 
 
 ''''''''''''''''''''''''''''''''''''
 ' Class Module: clsCallSiteMapProvider
 ''''''''''''''''''''''''''''''''''''
 ' clsCallSiteMapProvider
+' Purpose: Concrete clsMapProvider for testing: returns one DiagramItem
 Option Explicit
+
+Implements clsMapProvider
+
+' Forwarding method for late-bound calls
+Public Function GetItems(ByVal wb As Workbook, ByVal cfg As clsDiagramConfig) As Collection
+    Set GetItems = clsMapProvider_GetItems(wb, cfg)
+End Function
+
+' Implementation of clsMapProvider.GetItems
+Public Function clsMapProvider_GetItems(ByVal wb As Workbook, _
+                                      ByVal cfg As clsDiagramConfig) As Collection
+    Dim items As New Collection
+    Dim item As clsDiagramItem
+    Dim meta As clsMasterMeta
+    
+    ' Load stub metadata for Rectangle master
+    Set meta = LoadStencilMasterMetadata(modDiagramCore.ShapeProvider, "Basic_U.vssx", "Rectangle")
+    
+    ' Create a diagram item at the origin
+    Set item = New clsDiagramItem
+    Set item.meta = meta
+    item.PosX = cfg.OriginX
+    item.PosY = cfg.OriginY
+    
+    items.Add item
+    Set clsMapProvider_GetItems = items
+End Function
+
+' Other methods in clsCallSiteMapProvider remain as-is (e.g., MapCallSites)
+
+' Maps a collection of clsCallSite to connector pairs (fromID,toID)
+Public Function MapCallSites(sites As Collection, shapesDict As Scripting.Dictionary) As Collection
+    Dim connections As New Collection
+    Dim site As clsCallSite
+    Dim shapeCaller As Object
+    Dim shapeCallee As Object
+    Dim idCaller As Long
+    Dim idCallee As Long
+
+    For Each site In sites
+        Set shapeCaller = shapesDict(site.CallerModule & "." & site.CallerProc)
+        Set shapeCallee = shapesDict(site.CalleeModule & "." & site.CalleeProc)
+
+        On Error Resume Next
+        idCaller = shapeCaller.ID
+        If Err.Number <> 0 Then
+            Err.Clear
+            idCaller = shapeCaller("ID")
+        End If
+
+        Err.Clear
+        idCallee = shapeCallee.ID
+        If Err.Number <> 0 Then
+            Err.Clear
+            idCallee = shapeCallee("ID")
+        End If
+        On Error GoTo 0
+
+        connections.Add Array(idCaller, idCallee)
+    Next site
+
+    Set MapCallSites = connections
+End Function
 
 
 
@@ -305,5 +495,139 @@ Public Property Let ConnectorMasterU(ByVal Value As String)
     pConnectorMasterU = Value
 End Property
 
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsShapeProvider
+''''''''''''''''''''''''''''''''''''
+' Class: clsShapeProvider
+' Purpose: Encapsulates loading and caching of Visio stencil masters.
+' Requires references:
+'   - Microsoft Visio XX.0 Type Library
+'   - Microsoft Scripting Runtime
+
+Option Explicit
+
+Private VisioApp As Visio.application
+Private stencilCache As Scripting.Dictionary
+
+' Initialize must be called once, passing the Visio Application object
+Public Sub Initialize(ByVal application As Visio.application)
+    Set VisioApp = application
+    Set stencilCache = New Scripting.Dictionary
+End Sub
+
+' Returns the ID of the specified master in the given stencil
+Public Function GetMasterID(ByVal stencilPath As String, _
+                            ByVal masterName As String) As Long
+    Dim m As Visio.master
+    Set m = GetMaster(stencilPath, masterName)
+    GetMasterID = m.ID
+End Function
+
+' Returns the Master object by name, loading the stencil if needed
+Public Function GetMaster(ByVal stencilPath As String, _
+                          ByVal masterName As String) As Visio.master
+    Dim stencilDoc As Visio.Document
+    Set stencilDoc = LoadStencil(stencilPath)
+    Dim m As Visio.master
+    For Each m In stencilDoc.Masters
+        If StrComp(m.NameU, masterName, vbTextCompare) = 0 Then
+            Set GetMaster = m
+            Exit Function
+        End If
+    Next m
+    Err.Raise vbObjectError + 1000, "clsShapeProvider", _
+              "Master '" & masterName & "' not found in stencil '" & stencilPath & "'"
+End Function
+
+' Loads the stencil document and caches it; returns the Visio.Document
+Private Function LoadStencil(ByVal stencilPath As String) As Visio.Document
+    If Not stencilCache.Exists(stencilPath) Then
+        Dim doc As Visio.Document
+        ' Open stencil docked; adjust flags as needed
+        Set doc = VisioApp.Documents.OpenEx(stencilPath, visOpenDocked)
+        stencilCache.Add stencilPath, doc
+    End If
+    Set LoadStencil = stencilCache(stencilPath)
+End Function
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsVerticalLayoutAlgorithm
+''''''''''''''''''''''''''''''''''''
+' clsVerticalLayoutAlgorithm
+' clsVerticalLayoutAlgorithm (and future ones like clsGridLayoutAlgorithm) handle how to position items.
+Option Explicit
+'=== Class: clsVerticalLayoutAlgorithm (implements clsLayoutAlgorithm)
+Implements clsLayoutAlgorithm
+
+' Default vertical spacing
+Private Const DEFAULT_SPACING As Double = 1#
+
+' Simple vertical layout: X=0, Y spaced by DEFAULT_SPACING
+Private Function clsLayoutAlgorithm_Layout(ByVal items As Collection, _
+                                           ByVal cfg As clsDiagramConfig) As Collection
+    Dim out As New Collection
+    Dim idx As Long
+    Dim itm As clsDiagramItem
+
+    idx = 0
+    For Each itm In items
+        itm.PosX = cfg.OriginX                         ' Align at configured origin X
+        itm.PosY = cfg.OriginY - (idx * cfg.VerticalSpacing) ' Stack downward
+        out.Add itm
+        idx = idx + 1
+    Next itm
+
+    Set clsLayoutAlgorithm_Layout = out
+End Function
+
+
+
+''''''''''''''''''''''''''''''''''''
+' Class Module: clsDiagramBuilder
+''''''''''''''''''''''''''''''''''''
+Option Explicit
+
+' Visio constants required for DrawConnections
+Const visSectionObject As Integer = 1
+Const visRowXForm1      As Integer = 1
+Const visRowXForm2      As Integer = 2
+Const visXFormPinX      As Integer = 0
+Const visXFormPinY      As Integer = 1
+
+Private visApp As Visio.application
+Private pg     As Visio.page
+
+Public Sub Initialize(ByVal application As Visio.application, ByVal page As Visio.page)
+    Set visApp = application
+    Set pg = page
+End Sub
+
+Public Function DrawItems(ByVal items As Collection, ByVal shapeProv As clsShapeProvider) As Scripting.Dictionary
+    Dim dict As New Scripting.Dictionary, itm As clsDiagramItem
+    For Each itm In items
+        itm.Draw pg, shapeProv
+        dict.Add itm.meta.DisplayNameU, itm.Shape
+    Next
+    Set DrawItems = dict
+End Function
+
+Public Sub DrawConnections(ByVal connections As Collection, ByVal shapedDict As Scripting.Dictionary)
+    Dim connPair As Variant, fromShp As Visio.Shape, toShp As Visio.Shape, conn As Visio.Shape
+    For Each connPair In connections
+        Set fromShp = shapedDict(connPair(0))
+        Set toShp = shapedDict(connPair(1))
+        Set conn = pg.Drop(visApp.ConnectorToolDataObject, 0, 0)
+        With conn
+            .CellsSRC(visSectionObject, visRowXForm1, visXFormPinX).GlueTo fromShp.CellsSRC(visSectionObject, visRowXForm1, visXFormPinX)
+            .CellsSRC(visSectionObject, visRowXForm1, visXFormPinY).GlueTo fromShp.CellsSRC(visSectionObject, visRowXForm1, visXFormPinY)
+            .CellsSRC(visSectionObject, visRowXForm2, visXFormPinX).GlueTo toShp.CellsSRC(visSectionObject, visRowXForm1, visXFormPinX)
+            .CellsSRC(visSectionObject, visRowXForm2, visXFormPinY).GlueTo toShp.CellsSRC(visSectionObject, visRowXForm1, visXFormPinY)
+        End With
+    Next
+End Sub
 
 

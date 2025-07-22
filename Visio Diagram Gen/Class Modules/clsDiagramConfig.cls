@@ -19,6 +19,9 @@ Private pModuleFilter  As String
 Private pProcFilter    As String
 Private pScaleMode     As String
 Private pExportFormat  As String
+Private pOriginX As Double
+Private pOriginY As Double
+Private pVerticalSpacing As Double
 
 ' Initialize default values when class is created
 Private Sub Class_Initialize()
@@ -27,6 +30,9 @@ Private Sub Class_Initialize()
     pProcFilter = "*"
     pScaleMode = "FitToPage"
     pExportFormat = "PNG"
+    pOriginX = 0          ' Default X origin
+    pOriginY = 0          ' Default Y origin (top)
+    pVerticalSpacing = 1  ' Default spacing between items
 End Sub
 
 ' Property Get/Let for DiagramType
@@ -67,4 +73,31 @@ Public Property Get ExportFormat() As String
 End Property
 Public Property Let ExportFormat(ByVal Value As String)
     pExportFormat = Value
+End Property
+
+'--- OriginX property ---
+Public Property Get OriginX() As Double
+    OriginX = pOriginX
+End Property
+
+Public Property Let OriginX(ByVal val As Double)
+    pOriginX = val
+End Property
+
+'--- OriginY property ---
+Public Property Get OriginY() As Double
+    OriginY = pOriginY
+End Property
+
+Public Property Let OriginY(ByVal val As Double)
+    pOriginY = val
+End Property
+
+'--- VerticalSpacing property ---
+Public Property Get VerticalSpacing() As Double
+    VerticalSpacing = pVerticalSpacing
+End Property
+
+Public Property Let VerticalSpacing(ByVal val As Double)
+    pVerticalSpacing = val
 End Property

@@ -16,6 +16,8 @@ Option Explicit
 ' Private backing variables
 Private pStencilNameU As String
 Private pLabelText    As String
+Private pMeta As clsMasterMeta
+Private pShape As Visio.Shape
 Private pPosX          As Double
 Private pPosY          As Double
 
@@ -35,6 +37,24 @@ Public Property Let LabelText(ByVal Value As String)
     pLabelText = Value
 End Property
 
+'--- Meta Property ---
+Public Property Get meta() As clsMasterMeta
+    Set meta = pMeta
+End Property
+
+Public Property Set meta(ByVal val As clsMasterMeta)
+    Set pMeta = val
+End Property
+
+'--- Shape Property (read-only) ---
+Public Property Get Shape() As Visio.Shape
+    Set Shape = pShape
+End Property
+
+Private Property Set Shape(ByVal val As Visio.Shape)
+    Set pShape = val
+End Property
+
 ' PosX property
 Public Property Get PosX() As Double
     PosX = pPosX
@@ -50,3 +70,10 @@ End Property
 Public Property Let PosY(ByVal Value As Double)
     pPosY = Value
 End Property
+
+'--- Draws this item onto the specified page using the shape provider ---
+Public Sub Draw(ByVal pg As Visio.page, ByVal shapeProv As clsShapeProvider)
+    Dim m As Visio.master
+    Set m = shapeProv.GetMaster(pMeta.Path, pMeta.DisplayNameU)
+    Set pShape = pg.Drop(m, pPosX, pPosY)
+End Sub

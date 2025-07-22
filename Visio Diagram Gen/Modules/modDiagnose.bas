@@ -41,7 +41,7 @@ End Sub
 ' ListStencilMasters Application.GetBuiltInStencilFile(23, 0)   'Basic Flowchart
 Sub ListStencilMasters(stencilPath As String)
     Dim stn As Object, m As Object
-    Set stn = Application.Documents.OpenEx(stencilPath, 64)   '64 = visOpenHidden
+    Set stn = application.Documents.OpenEx(stencilPath, 64)   '64 = visOpenHidden
     Debug.Print "Masters in stencil (" & stencilPath & "):"
     For Each m In stn.Masters
         Debug.Print "  - "; m.NameU
@@ -78,17 +78,17 @@ Public Sub Diag_ListAllStencilMasters()
     Dim scUpdt     As Boolean
 
     ' Performance optimizations
-    scUpdt = Application.ScreenUpdating
-    Application.ScreenUpdating = False
-    calcMode = Application.Calculation
-    Application.Calculation = xlCalculationManual
+    scUpdt = application.ScreenUpdating
+    application.ScreenUpdating = False
+    calcMode = application.Calculation
+    application.Calculation = xlCalculationManual
 
     ' Prepare output worksheet
     Set wb = ThisWorkbook
     On Error Resume Next
-    Application.DisplayAlerts = False
+    application.DisplayAlerts = False
     wb.Worksheets("StencilMasters").Delete
-    Application.DisplayAlerts = True
+    application.DisplayAlerts = True
     On Error GoTo 0
 
     Set ws = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
@@ -135,8 +135,8 @@ CleanUp:
     Set fso = Nothing
 
     ' Restore Excel settings
-    Application.Calculation = calcMode
-    Application.ScreenUpdating = scUpdt
+    application.Calculation = calcMode
+    application.ScreenUpdating = scUpdt
 
     MsgBox "Completed extracting stencil masters with metadata. See 'StencilMasters' sheet.", vbInformation
 End Sub
